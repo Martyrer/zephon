@@ -1,0 +1,70 @@
+name: Release
+
+# Push a tag such as v0.1.0-alpha to build the exe and publish a draft release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+# The build runs with a read-only token and no cache; only the publish job, which runs no
+# project code, can write to the repository.
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: stable
+      - name: Test
+        run: cargo test --locked
+      - name: Build
+        run: cargo build --locked --release
+      - name: Install cargo-about
+        run: cargo install cargo-about --locked --version 0.9.2 --features cli
+      - name: Third-party licenses
+        run: cargo about generate --locked --fail about.hbs -o THIRD-PARTY-LICENSES.html
+      - name: Package
+        shell: pwsh
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $version = $env:REF_NAME.TrimStart("v")
+          $dir = "zephon-$version-windows-x64"
+          New-Item -ItemType Directory $dir | Out-Null
+          Copy-Item target\release\zephon.exe, README.md, LICENSE-MIT, LICENSE-APACHE, THIRD-PARTY-LICENSES.html $dir
+          Compress-Archive -Path "$dir\*" -DestinationPath "$dir.zip"
+          (Get-FileHash "$dir.zip" -Algorithm SHA256).Hash.ToLower() + "  $dir.zip" | Out-File -Encoding ascii "$dir.zip.sha256"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: |
+            zephon-*.zip
+            zephon-*.zip.sha256
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+      - name: Draft release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          files: |
+            zephon-*.zip
+            zephon-*.zip.sha256

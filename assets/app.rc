@@ -1,0 +1,4 @@
+// Resource 1 is the app icon: Explorer shows it for the exe, and GPUI loads it for the
+// window and taskbar. assets/icon.ico is the title-bar glyph (assets/icon.svg) rendered
+// at 16 to 256 px.
+1 ICON "icon.ico"

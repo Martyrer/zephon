@@ -1,0 +1,66 @@
+[package]
+name = "zephon"
+version = "0.1.0-alpha"
+edition = "2024"
+description = "Plays Windows system audio on AirPlay 2 speakers such as the HomePod mini"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Martyrer/zephon"
+authors = ["Martyrer"]
+readme = "README.md"
+keywords = ["airplay", "homepod", "audio", "windows", "streaming"]
+categories = ["multimedia::audio"]
+rust-version = "1.95"
+publish = false
+
+[[bin]]
+name = "zephon"
+path = "src/main.rs"
+
+# Nyx-Refrain library crates, pinned to release 0.9.3 (see docs/adr/0001-*.md).
+# Before bumping `rev`, read the diff of these crates (especially raop/src/ap2/session.rs)
+# and re-run the listening and latency checks.
+[dependencies]
+capture = { git = "https://github.com/pStrikeZ/Nyx-Refrain", rev = "0a2ef7b" }
+raop = { git = "https://github.com/pStrikeZ/Nyx-Refrain", rev = "0a2ef7b" }
+pipeline = { git = "https://github.com/pStrikeZ/Nyx-Refrain", rev = "0a2ef7b" }
+discovery = { git = "https://github.com/pStrikeZ/Nyx-Refrain", rev = "0a2ef7b" }
+netutil = { git = "https://github.com/pStrikeZ/Nyx-Refrain", rev = "0a2ef7b" }
+
+tokio = { version = "1.43", features = ["rt-multi-thread", "macros", "time", "signal", "sync", "net", "io-util"] }
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+plist = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# GUI. gpui-kit ships about weekly with breaking changes and rides an exact Zed GPUI
+# snapshot, so both are pinned to exact versions. Bump them together and test the GUI by hand.
+gpui-kit = "=0.7.3"
+# Not used directly: only pins the GPUI snapshot (renamed so it cannot clash with `gpui_kit::gpui`).
+gpui-snapshot-pin = { package = "gpui-pre", version = "=0.3.9" }
+futures = "0.3"
+# The window's HWND, for the DWM calls behind Mica, rounded corners and the dark frame.
+raw-window-handle = "0.6"
+
+[dev-dependencies]
+# Paused time for the controller's timing tests.
+tokio = { version = "1.43", features = ["test-util"] }
+
+[build-dependencies]
+# Embeds assets/icon.ico as the exe icon (build.rs).
+embed-resource = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+# Every `unsafe` block says why it is sound in a `// SAFETY:` comment.
+undocumented_unsafe_blocks = "warn"
+dbg_macro = "warn"
+todo = "warn"

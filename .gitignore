@@ -1,0 +1,17 @@
+/target
+
+# Local-only files: research notes, prototypes and logs from development.
+/.private/
+.venv*/
+__pycache__/
+*.log
+
+# Release packaging output
+/zephon-*/
+/zephon-*.zip*
+/THIRD-PARTY-LICENSES.html
+
+# Editors and agents
+.claude/worktrees/
+.vscode/
+.idea/

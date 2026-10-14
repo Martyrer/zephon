@@ -1,0 +1,44 @@
+name: Bug report
+description: Something does not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For security problems, use private reporting instead (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Zephon version
+      description: Settings > About, or `zephon --version`.
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+    validations:
+      required: true
+  - type: input
+    id: receivers
+    attributes:
+      label: Receivers
+      description: Models and software versions, for example "2 × HomePod mini, HomePod Software 27.0".
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        The relevant lines from `%APPDATA%\Zephon\log.txt`. The log contains your receivers'
+        names and local IP addresses; remove them if you prefer.
+      render: text
