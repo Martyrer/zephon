@@ -12,6 +12,12 @@ All notable changes to this project are listed here. The format follows
   2, 4 and 8 s. The row shows "Reconnecting, attempt 1 of 3…"; after the last attempt it says
   what to check.
 
+### Changed
+
+- The lag line at the bottom of the window is gone: its dots looked draggable but weren't, and
+  each room already shows its lag. When rooms on different profiles play out of step, the
+  footer now says by how much and which profile lines them up.
+
 ### Fixed
 
 - When no room is left playing because they all failed, playback stops, so the footer shows

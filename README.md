@@ -29,7 +29,7 @@ such as TuneBlade can still find a HomePod but can no longer play to it. Zephon 
 - Per-room volume, applied live, and optionally following volume changes made on the phone or
   HomePod.
 - Per-room latency profile: **Low** (about 125 ms behind the PC), **Balanced** (165 ms, the
-  default) or **Stable** (257 ms, rides out Wi-Fi drops). A lag line shows where each room sits.
+  default) or **Stable** (257 ms, rides out Wi-Fi drops). The window says when rooms on different profiles play out of step.
 - Network loss shown per room (resends and lost packets per minute).
 - Windows 11 look: Mica or Acrylic glass, light and dark theme, Windows accent color, font and
   text size settings.

@@ -31,7 +31,7 @@ The UI uses the user's words, not the internal ones.
 
 ## Concept
 
-The window is a pane of Windows glass with the rooms listed on it, and a **lag line** runs along the bottom. The lag line shows each playing room as a point on a short timeline that starts at "This PC". The user sees at a glance where the sound is going and how far behind the PC each room plays. Everything else stays native to Windows 11, so the lag line is the one thing that stands out.
+The window is a pane of Windows glass with the rooms listed on it and Play in a footer at the bottom. Each room that is on shows its volume and how far behind the PC it plays. Everything stays native to Windows 11.
 
 ## Color
 
@@ -44,7 +44,7 @@ There are two token sets, Light and Dark, and the app's follow-system wiring cho
 | Ink | `#1B1E25` | `#F1F3F6` | primary text, room names, the "This PC" origin |
 | Ink 2 | `#565C69` | `#A9AFBB` | labels, meta, loss figures, captions |
 | Ink 3 | `#868C99` | `#6F7682` | IP addresses, offline names, disabled text (never body text) |
-| Lagoon (accent) | `#00708A` | `#5CC8D6` | Play, switch on, slider fill, "Playing", lag markers |
+| Lagoon (accent) | `#00708A` | `#5CC8D6` | Play, switch on, slider fill, "Playing" |
 | Amber | `#8F5300` | `#F0B455` | lost/min, the glitch hint, firewall warning |
 | Signal red | `#B4232C` | `#FF9494` | the "Didn't connect" error |
 
@@ -98,7 +98,7 @@ Contrast was checked over the mockup's backdrops. Lagoon on Layer 2 is about 5:1
 
 - The glass, the caption buttons and the system flyouts that open from this window all use Segoe UI Variable. Another face would look wrong next to them.
 - Its digits are tabular by default, so 50/72/30, 165/257 and the resends/min figures stay aligned without a monospace face.
-- It has an optical-size axis: Small for 12 px, Text for 14 px and Display for the room names and lag figures.
+- It has an optical-size axis: Small for 12 px, Text for 14 px and Display for the room names.
 
 **Fixel** (MacPaw, SIL OFL 1.1, variable weight 100-900 and width 75-100, with `tnum`) was the OFL candidate. Its width axis looked useful for long room names in a narrow window. It does not earn its place, for these reasons:
 
@@ -110,12 +110,11 @@ If an embedded face is ever wanted, Fixel is the one to use. Ship its static Tex
 
 | Role | Size / line | Weight | Optical size |
 |---|---|---|---|
-| Lag figure (`165`) | 20 / 24 | 600 | Display |
 | Room name | 15 / 22 | 600 | Display |
 | Body, controls, buttons, "Rooms" | 14 / 20 | 400; 600 for "Rooms" and Play | Text |
 | Meta, status, loss, captions, title bar | 12 / 16 | 400; 600 for status words | Small |
 
-The scale is 12 / 14 / 15 / 20. The step from 15 to 20 is used only by the lag figures, so they stand out. All text is in sentence case, with no all-caps labels.
+The scale is 12 / 14 / 15. All text is in sentence case, with no all-caps labels.
 
 ## Layout
 
@@ -168,12 +167,8 @@ I chose C. Only rooms that are on show volume, profile and loss, because those s
 │ │ Den Apple TV 4K 192.0.2.7               Offline (═○) │ │  dimmed name
 │ ╰──────────────────────────────────────────────────────╯ │
 ├──────────────────────────────────────────────────────────┤  footer, Layer 1
-│                          165ms              257ms        │
-│ ┃━━━━━━━━━━━━┼━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━●━━━━━━━━   │  lag line, 0 to 300 ms
-│ This PC                   Kitchen          Upstairs Office│
-│                           Basement TV                    │
-│ Each room plays this far behind the PC. Rooms aren't     │
-│ synced to each other.                                    │
+│ Rooms on different profiles play up to 92 ms apart. Put  │  sync note, only when profiles differ
+│ them all on Stable to line them up.                      │
 │ Playing in 3 rooms                             [■ Stop]  │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -182,13 +177,12 @@ I chose C. Only rooms that are on show volume, profile and loss, because those s
 
 - The meta text wraps under the room name.
 - The volume slider takes the full row, and the profile select moves to its own line below it.
-- The lag line keeps its 0-300 ms scale. Name labels sit left-aligned under their marker. The rightmost room's name is right-aligned to the end of the track, so labels do not collide. If two labels would still overlap, the later one moves down one line.
 
 ### Stopped
 
 - **Sound from** is an active select again, with a chevron.
 - Rooms that are on keep their slider (start volume) and profile, but show no status.
-- The lag line shows hollow markers and the caption "Each room will play…".
+- The sync note counts the rooms that will play on Play.
 - The footer reads "2 rooms on", with the accent button **[▶ Play]** on the right.
 
 ### Firewall banner (rare)
@@ -201,7 +195,7 @@ The banner has two sizes and uses the same button label, **Install firewall rule
 
 ## Components (six)
 
-The window uses only six components: the room row, slider, switch, select, button (accent, neutral and small) and banner. The lag line is not a seventh component. It is built from plain divs: a 1 px rail, a 3 px run with a linear gradient, absolutely positioned 15 px dots, and text.
+The window uses only six components: the room row, slider, switch, select, button (accent, neutral and small) and banner.
 
 The corner radii have a hierarchy, so not everything gets the same radius:
 
@@ -209,30 +203,29 @@ The corner radii have a hierarchy, so not everything gets the same radius:
 - rooms group: 8
 - banner: 6
 - controls, hint and error: 4
-- switch and dots: fully round
+- switch: fully round
 
 The only shadows are the window's (from the OS) and a 1 px shadow under the slider thumb. The rows sit in one shared group and are separated by hairlines, so there are no separate cards with their own shadows.
 
 ## Principles
 
-1. **Native first, one exception.** Windows 11 metrics (32 px controls, 40×20 switch, 20 px slider thumb with an inner dot, 46 px caption buttons) and Segoe UI Variable throughout. The lag line is the only thing that is not stock Windows.
+1. **Native first.** Windows 11 metrics (32 px controls, 40×20 switch, 20 px slider thumb with an inner dot, 46 px caption buttons) and Segoe UI Variable throughout.
 2. **Glass is the backdrop, not decoration.** The window is the only surface that is blurred. Panels are flat translucent tints over it, and no element uses a blur of its own.
 3. **Show controls only where they do something.** A room that is off has no slider or profile select. While playing, Sound from shows as plain text with "Stop to change" instead of looking like a broken select.
 4. **Numbers in fixed slots.** Volume, lag and loss each have a fixed position with tabular digits, so a glance compares rooms without reading labels.
 5. **Hints are offers.** The glitch hint names its cost (+92 ms) and offers one button. The app never changes the profile by itself.
 6. **Errors say what to do.** For example: "Didn't connect. No answer within 10 s. The firewall rule is likely missing."
 
-## The memorable element: the lag line
+## The sync note
 
-The alpha explained the timing in a 3-line paragraph: rooms are not clock-synced, each profile plays a fixed lag behind the PC, and rooms on different profiles play offset from each other. The lag line shows the same thing as a picture:
+Rooms are not clock-synced to each other. Each plays its profile's lag behind the PC, so rooms on different profiles play the difference apart. The profile select in each row already shows the lag behind the PC. The offset between rooms is the one thing the rows do not show, so the footer shows it in one line, and only when the rooms that play are on different profiles:
 
-- A rail starts at "This PC" (a short ink bar at 0).
-- Each playing room is a Lagoon dot at its profile's lag, with the lag figure above it in 20 px Display type and the room names below.
-- Rooms on the same profile share one dot, so the offset between Kitchen and Upstairs Office is the visible gap between their dots.
-- A faint tick marks the unused Low slot at 125 ms.
-- A room that is losing packets keeps its dot, but its name turns amber.
+- Two rooms: "Kitchen and Bedroom TV play 92 ms apart. Put both on Stable to line them up."
+- More rooms: "Rooms on different profiles play up to 132 ms apart. Put them all on Stable to line them up."
 
-When a profile changes, the dot slides to its new position with a 200 ms ease-out. That is the only animation in the app besides the switch, and it is skipped when Windows' reduce-motion setting is on. The caption under the line says the rest in one sentence.
+It suggests the slowest profile in use, because that change makes no room more likely to glitch.
+
+The lag line that used to fill the footer showed the same data as a timeline. Its round dots on a rail looked like slider thumbs, so people tried to drag them, and the lag behind the PC was already in each row's select.
 
 ## Follow system
 
@@ -310,7 +303,7 @@ The gear in the main title bar opens a second, smaller window (520 × 640, resiz
 
 1. **One card per room with a soft shadow, changed to one grouped list with hairlines.** Separate cards are the SaaS-card cliché. They also hid the difference between rooms that are on and off, which the plan now shows with Layer 2 versus Layer 1.
 2. **Monospace for IPs and milliseconds, changed to Segoe's tabular figures.** A small monospace face for data labels is a template tell. Tabular figures give the same alignment.
-3. **The explanatory paragraph, changed to the lag line.** The paragraph was the most important information on the screen, and nobody reads it.
+3. **The explanatory paragraph, changed to the lag line, and later to the sync note.** The paragraph was the most important information on the screen, and nobody reads it. The lag line that replaced it was later removed (see The sync note).
 4. **The Windows default blue accent, changed to Lagoon (a cool teal).** Default blue would make the app look like an unstyled template. Lagoon is not an acid green, and the dark theme is translucent wallpaper glass, not a near-black slab, which keeps it clear of the "near-black with one bright accent" cliché.
 5. **An in-window "Zephon (alpha)" heading and a System/Light/Dark segmented control, both removed.** The title bar already names the app, and the theme is set once, so a single title-bar button is enough.
 6. **Separate Refresh buttons for the device list and rooms.** The device list now re-reads itself each time the select opens. Rooms keep one small ↻ icon button for an immediate re-browse.
@@ -322,7 +315,7 @@ The cliché list does not apply anywhere else:
 - no all-caps eyebrows
 - no meta strings joined with middle dots (the IP is set apart by spacing and color)
 - no "→" on buttons
-- no decorative gradient: the only gradient is the lag run, and it shows the sound travelling out from the PC
+- no decorative gradient
 
 **Changes after critiquing the render:**
 

@@ -28,7 +28,7 @@
   --layer-2: rgba(255, 255, 255, 0.66);    /* list_active: an included room */
   --control: rgba(255, 255, 255, 0.72);    /* select and neutral button fill */
   --stroke: rgba(22, 28, 45, 0.085);       /* border */
-  --stroke-strong: rgba(22, 28, 45, 0.18); /* input bottom edge, lag track */
+  --stroke-strong: rgba(22, 28, 45, 0.18); /* input bottom edge, slider thumb ring */
   --track: rgba(22, 28, 45, 0.24);         /* slider rail, switch outline */
   --thumb: #FFFFFF;
   --amber-wash: rgba(143, 83, 0, 0.085);
@@ -255,36 +255,9 @@ body {
 .banner.full p { color: var(--ink-2); }
 .banner.full .actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 12px; color: var(--ink-2); }
 
-/* ---------- footer: transport + lag line ---------- */
+/* ---------- footer: sync note + transport ---------- */
 .footer { background: var(--layer-1); border-top: 1px solid var(--stroke); padding: 14px 16px 16px; }
-.lag { position: relative; height: 82px; margin: 0 2px; }
-.lag .rail { position: absolute; left: 0; right: 0; top: 37px; height: 1px; background: var(--stroke-strong); }
-.lag .run { position: absolute; left: 0; top: 36px; height: 3px; border-radius: 2px; width: calc(var(--x) * 1%); background: linear-gradient(90deg, var(--stroke-strong), var(--lagoon)); }
-.lag .run.planned { background: var(--track); opacity: .6; }
-.lag .tick { position: absolute; top: 33px; width: 1px; height: 9px; background: var(--track); left: calc(var(--x) * 1%); }
-.lag .origin { position: absolute; left: 0; top: 28px; width: 2px; height: 19px; border-radius: 1px; background: var(--ink); }
-.lag .origin-label { position: absolute; left: 0; top: 54px; font-size: 12px; line-height: 16px; color: var(--ink-2); white-space: nowrap; }
-.lag .mark { position: absolute; left: calc(var(--x) * 1%); top: 0; height: 82px; }
-.lag .dot {
-  position: absolute; left: -7px; top: 31px; width: 15px; height: 15px; border-radius: 50%;
-  background: var(--lagoon); border: 3px solid var(--thumb);
-  box-shadow: 0 0 0 1px var(--stroke-strong);
-}
-.lag .dot.hollow { background: var(--thumb); border: 2px solid var(--ink-3); box-shadow: none; }
-.lag .ms {
-  position: absolute; top: 0; left: 0; transform: translateX(-50%);
-  font: 600 20px/24px "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -0.01em;
-  color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap;
-}
-.lag .ms small { font: 400 12px/16px "Segoe UI Variable Small", "Segoe UI", sans-serif; color: var(--ink-2); margin-left: 2px; letter-spacing: 0; }
-.lag .mark.end .ms { transform: translateX(calc(-100% + 10px)); }
-.lag .stopped .ms { color: var(--ink-2); }
-.lag .names, .lag .names-end { position: absolute; top: 52px; font-size: 12px; line-height: 15px; white-space: nowrap; color: var(--ink); }
-.lag .names { left: -7px; }
-.lag .names-end { right: 0; text-align: right; }
-.lag .names span, .lag .names-end span { display: block; }
-.lag .warn { color: var(--amber); }
-.lag-caption { margin: 4px 0 14px; font-size: 12px; line-height: 16px; color: var(--ink-2); }
+.sync-note { margin: 0 0 10px; font-size: 12px; line-height: 16px; color: var(--ink-2); }
 .transport { display: flex; align-items: center; gap: 12px; }
 .transport .summary { flex: 1; color: var(--ink-2); }
 .transport .summary b { color: var(--ink); font-weight: 600; }
@@ -433,16 +406,7 @@ body {
         </div>
 
         <div class="footer">
-          <div class="lag">
-            <span class="rail"></span>
-            <span class="run" style="--x:85.67"></span>
-            <span class="tick" style="--x:41.67"></span>
-            <span class="origin"></span><span class="origin-label">This PC</span>
-            <span class="mark" style="--x:55"><span class="ms">165<small>ms</small></span><span class="dot"></span><span class="names"><span>Kitchen</span><span class="warn">Basement TV </span></span></span>
-            <span class="mark end" style="--x:85.67"><span class="ms">257<small>ms</small></span><span class="dot"></span></span>
-            <span class="names-end"><span>Upstairs Office</span></span>
-          </div>
-          <p class="lag-caption">Each room plays this far behind the PC. Rooms aren't synced to each other.</p>
+          <p class="sync-note">Rooms on different profiles play up to 92 ms apart. Put them all on Stable to line them up.</p>
           <div class="transport">
             <span class="summary"><b>Playing</b> in 3 rooms</span>
             <span class="btn wide"><svg><use href="#i-stop"/></svg>Stop</span>
@@ -534,16 +498,7 @@ body {
         </div>
 
         <div class="footer">
-          <div class="lag">
-            <span class="rail"></span>
-            <span class="run" style="--x:85.67"></span>
-            <span class="tick" style="--x:41.67"></span>
-            <span class="origin"></span><span class="origin-label">This PC</span>
-            <span class="mark" style="--x:55"><span class="ms">165<small>ms</small></span><span class="dot"></span><span class="names"><span>Kitchen</span><span class="warn">Basement TV </span></span></span>
-            <span class="mark end" style="--x:85.67"><span class="ms">257<small>ms</small></span><span class="dot"></span></span>
-            <span class="names-end"><span>Upstairs Office</span></span>
-          </div>
-          <p class="lag-caption">Each room plays this far behind the PC. Rooms aren't synced to each other.</p>
+          <p class="sync-note">Rooms on different profiles play up to 92 ms apart. Put them all on Stable to line them up.</p>
           <div class="transport">
             <span class="summary"><b>Playing</b> in 3 rooms</span>
             <span class="btn wide"><svg><use href="#i-stop"/></svg>Stop</span>
@@ -619,15 +574,7 @@ body {
             </div>
           </div>
           <div class="footer">
-            <div class="lag">
-              <span class="rail"></span>
-              <span class="tick" style="--x:41.67"></span><span class="tick" style="--x:55"></span><span class="tick" style="--x:85.67"></span>
-              <span class="origin"></span><span class="origin-label">This PC</span>
-              <span class="mark stopped" style="--x:55"><span class="ms">165<small>ms</small></span><span class="dot hollow"></span><span class="names"><span>Kitchen</span></span></span>
-              <span class="mark end stopped" style="--x:85.67"><span class="ms">257<small>ms</small></span><span class="dot hollow"></span></span>
-              <span class="names-end"><span>Upstairs Office</span></span>
-            </div>
-            <p class="lag-caption">Each room will play this far behind the PC. Rooms aren't synced to each other.</p>
+            <p class="sync-note">Kitchen and Upstairs Office play 92 ms apart. Put both on Stable to line them up.</p>
             <div class="transport">
               <span class="summary">2 rooms on</span>
               <span class="btn primary wide"><svg><use href="#i-play"/></svg>Play</span>

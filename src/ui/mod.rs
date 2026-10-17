@@ -6,19 +6,19 @@
 //! with an `AtomicBool`.
 //!
 //! The look follows design/DESIGN.md: a pane of glass (acrylic) with the rooms on it and the
-//! lag line at the bottom. `style` holds the tokens, `accent` the Windows accent, `appearance`
+//! transport in a footer. `style` holds the tokens, `accent` the Windows accent, `appearance`
 //! the look both windows share, `glass` the window material, `controls` the switch/slider/
-//! icons, `rooms` the room rows and banners, `lag_line` the footer, `settings_window` the
-//! settings (opened from the gear in the title bar).
+//! icons, `rooms` the room rows and banners, `sync_note` the footer's note about rooms on
+//! different profiles, `settings_window` the settings (opened from the gear in the title bar).
 
 mod accent;
 mod appearance;
 mod controls;
 mod glass;
-mod lag_line;
 mod rooms;
 mod settings_window;
 mod style;
+mod sync_note;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -444,7 +444,7 @@ impl SenderView {
             )
     }
 
-    fn render_footer(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = Palette::of(cx);
         let fonts = &self.fonts;
         let st = &self.state;
@@ -502,7 +502,13 @@ impl SenderView {
             .pt(px(14.))
             .px(px(16.))
             .pb(px(16.))
-            .child(lag_line::render(self, window, cx))
+            .children(sync_note::sync_note(&st.receivers, streaming).map(|n| {
+                div()
+                    .mb(px(10.))
+                    .t_small(fonts)
+                    .text_color(p.ink_2)
+                    .child(n)
+            }))
             .children(st.message.clone().map(|m| {
                 div()
                     .mb(px(10.))
@@ -576,7 +582,7 @@ impl Render for SenderView {
                     .child(div().flex_1().min_h(px(16.)).bg(p.root))
                     .overflow_y_scrollbar(),
             )
-            .child(self.render_footer(window, cx))
+            .child(self.render_footer(cx))
     }
 }
 

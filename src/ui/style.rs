@@ -7,7 +7,7 @@
 //!
 //! Every surface is a translucent tint over the window material, so no color here is an
 //! opaque panel except the select menu. gpui-kit components read the theme JSON; the app's
-//! own elements (rooms, switch, slider, lag line) read [`Palette`] directly, because some
+//! own elements (rooms, switch, slider) read [`Palette`] directly, because some
 //! tokens have no gpui-kit field (amber/red washes) and gpui-kit clamps `list_active` to 20 %.
 //!
 //! GPUI's renderer adds alpha when it blends (D3D11 `SrcBlendAlpha = DestBlendAlpha = ONE`),
@@ -421,7 +421,7 @@ pub struct Fonts {
     pub text: SharedString,
     pub display: SharedString,
     pub small: SharedString,
-    /// Text size factor (1.0 = the 12 / 14 / 15 / 20 scale).
+    /// Text size factor (1.0 = the 12 / 14 / 15 scale).
     pub scale: f32,
 }
 
@@ -473,7 +473,7 @@ impl Fonts {
     }
 }
 
-/// The type scale (12 / 14 / 15 / 20, times the text size) as text styles on any element.
+/// The type scale (12 / 14 / 15, times the text size) as text styles on any element.
 pub trait TypeExt: Styled + Sized {
     /// Meta, status, loss, captions, title bar: 12/16, optical size Small.
     fn t_small(self, fonts: &Fonts) -> Self {
@@ -492,13 +492,6 @@ pub trait TypeExt: Styled + Sized {
         self.font_family(fonts.display.clone())
             .text_size(fonts.px(15.))
             .line_height(fonts.px(22.))
-            .font_weight(FontWeight::SEMIBOLD)
-    }
-    /// Lag figures: 20/24 semibold, optical size Display.
-    fn t_figure(self, fonts: &Fonts) -> Self {
-        self.font_family(fonts.display.clone())
-            .text_size(fonts.px(20.))
-            .line_height(fonts.px(24.))
             .font_weight(FontWeight::SEMIBOLD)
     }
 }
