@@ -14,7 +14,7 @@ use gpui_kit::*;
 use super::controls::{self, icon};
 use super::style::{Palette, TypeExt as _, lead_text};
 use super::{SenderView, profile_title};
-use crate::controller::{Command, ReceiverView};
+use crate::controller::{Command, RECONNECT_ATTEMPTS, ReceiverView, Reconnect};
 use crate::firewall::FirewallState;
 use crate::session::Status;
 
@@ -247,6 +247,12 @@ fn render_room(
             p.ink_2,
             true,
         ))
+    } else if let Reconnect::Attempt(n) = r.reconnect {
+        Some((
+            format!("Reconnecting, attempt {n} of {RECONNECT_ATTEMPTS}…"),
+            p.amber,
+            true,
+        ))
     } else {
         match &r.status {
             Status::Streaming => Some(("Playing".into(), p.lagoon, true)),
@@ -433,8 +439,9 @@ fn render_room(
     if let Status::Error(e) = &r.status
         && !r.restarting
     {
-        // Stats arrive only while streaming, so an error without them is a failed start.
-        let head = if r.stats.is_some() {
+        // Stats arrive only while streaming, so an error without them is a failed start, unless
+        // it ends the reconnect attempts after a lost connection.
+        let head = if r.stats.is_some() || r.reconnect == Reconnect::GaveUp {
             "Stopped playing."
         } else {
             "Didn't connect."

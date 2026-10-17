@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use tokio::time::Instant;
 
-use super::{DEFAULT_VOLUME_PCT, EndpointView, ReceiverView};
+use super::{DEFAULT_VOLUME_PCT, EndpointView, ReceiverView, Reconnect};
 use crate::advice::{LOSS_WINDOW, LossStats};
 use crate::session::{
     self, LatencyProfile, SessionCmd, SessionEvent, SessionHandle, SessionStats, Status,
@@ -79,6 +79,7 @@ pub(super) fn receivers() -> Vec<ReceiverView> {
                 stats: None,
                 profile,
                 restarting: false,
+                reconnect: Reconnect::No,
                 suggestion: None,
                 hidden: false,
             }

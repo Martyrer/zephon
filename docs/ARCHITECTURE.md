@@ -16,7 +16,12 @@ AirPlay 2 realtime (stream type 96) with transient pairing, ChaCha20, NTP timing
 
 - sets `quiet_mode: false` and a real `volume_db` (`Ap2Config::default()` is silent);
 - wraps the start in a 10 s timeout;
-- sends `feedback()` every 2 s to keep the session open;
+- sends `feedback()` every 2 s to keep the session open, and counts the connection as lost
+  when a keep-alive or volume change gets no answer within 10 s (TCP resends on a lossy Wi-Fi
+  link often delay an answer past 3 s while the audio still plays). Stop does not wait for a
+  request in flight;
+- has the capture hub feed its queue only once it streams, so a slow start cannot overflow
+  the queue and leave a gap that throws off Nyx's drift estimate;
 - applies live volume changes and forwards the receiver's volume reports;
 - sends TEARDOWN when it stops.
 
@@ -47,6 +52,20 @@ integration tests in a `tests/` folder could use them; `cli`, `logging`, `single
 `engine.rs` (the background task that owns the sessions) and `demo.rs` (demo mode).
 
 Each session task is independent, so one receiver failing never stops the others.
+
+## Reconnect
+
+A session that fails after it was streaming (the keep-alive or a volume change got no answer
+within 10 s, or the receiver closed the connection) ends as usual. The controller then starts a
+new session for that room, up to 3 times, with exponential backoff: 2, 4 and 8 s after the
+failed session has ended. An attempt resets the count only once it has played for 60 s; one
+that drops sooner counts as failed, so a link that keeps dropping ends in "gave up" instead of
+reconnecting forever. A failed first start is not
+retried, and a start timeout during a reconnect does not raise the firewall banner, since the
+room played before. After the last attempt the room shows the first cause and what to check.
+
+When every room that is on has failed and none is playing, connecting or waiting to reconnect,
+the controller stops playback (and closes the capture), so the UI offers Play again.
 
 ## Capture endpoint
 

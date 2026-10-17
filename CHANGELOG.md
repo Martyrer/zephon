@@ -6,6 +6,21 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A room that loses its connection while playing reconnects by itself: up to 3 attempts, after
+  2, 4 and 8 s. The row shows "Reconnecting, attempt 1 of 3…"; after the last attempt it says
+  what to check.
+
+### Fixed
+
+- When no room is left playing because they all failed, playback stops, so the footer shows
+  Play instead of Stop. The footer no longer says "Connecting…" when nothing is connecting.
+- A slow answer from a receiver on weak Wi-Fi no longer drops the room: it now gets 10 s, not
+  3 s. Stop no longer waits for an answer either.
+- A room whose start took over about a second no longer plays with its clock correction stuck
+  at the limit for many minutes.
+
 ## [0.1.0-alpha] - unreleased
 
 First public release.

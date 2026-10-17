@@ -18,18 +18,19 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 use crate::advice::{LOSS_WINDOW, LossStats};
-use crate::capture::{FanoutSource, QueueCloser};
+use crate::capture::{FanoutSource, QueueControl};
 
 /// How long a session start may take before we give up. Without the firewall rule the
 /// receiver waits about 32 s and then answers the stream SETUP with 400; fail sooner.
 pub const START_TIMEOUT: Duration = Duration::from_secs(10);
-/// How long a control request (keep-alive, volume) may wait for its answer. Nyx
-/// waits forever, so a receiver that keeps the connection open but stops answering would
-/// otherwise hold the session (and with it Stop) indefinitely.
-const CONTROL_TIMEOUT: Duration = Duration::from_secs(3);
-/// TEARDOWN wait after Stop. Shorter than [`CONTROL_TIMEOUT`] so a slow receiver still gets
-/// its TEARDOWN within the controller's `SHUTDOWN_TIMEOUT` when the app closes: Stop can
-/// first wait out one control request in flight (up to 3 s).
+/// How long a control request (keep-alive, volume) may wait for its answer before the session
+/// counts as lost. Nyx waits forever, so a receiver that keeps the connection open but stops
+/// answering would otherwise hold the session indefinitely. On a lossy Wi-Fi link an answer
+/// that TCP has to resend often takes over 3 s while the audio still plays, so this is well
+/// above that. Stop never waits for it ([`control`]).
+const CONTROL_TIMEOUT: Duration = Duration::from_secs(10);
+/// TEARDOWN wait after Stop, short enough that a slow receiver still gets its TEARDOWN within
+/// the controller's `SHUTDOWN_TIMEOUT` when the app closes.
 const TEARDOWN_TIMEOUT: Duration = Duration::from_millis(1500);
 /// TEARDOWN wait once the receiver has already stopped answering: it is sent as a courtesy.
 const TEARDOWN_AFTER_LOSS: Duration = Duration::from_millis(500);
@@ -202,7 +203,7 @@ pub fn spawn(
     id: u64,
     spec: SessionSpec,
     source: FanoutSource,
-    closer: QueueCloser,
+    queue: QueueControl,
     events: EventTx,
 ) -> SessionHandle {
     let (handle, rx) = SessionHandle::new(id);
@@ -210,7 +211,7 @@ pub fn spawn(
         let emit = |e: SessionEvent| {
             let _ = events.send((id, e));
         };
-        let stats = run(&spec, source, closer, rx, &emit).await;
+        let stats = run(&spec, source, queue, rx, &emit).await;
         emit(SessionEvent::Ended(stats));
     });
     handle
@@ -223,7 +224,7 @@ fn firewall_like(e: &Ap2Error) -> bool {
 async fn run(
     spec: &SessionSpec,
     source: FanoutSource,
-    closer: QueueCloser,
+    queue: QueueControl,
     mut cmds: mpsc::UnboundedReceiver<SessionCmd>,
     emit: &(dyn Fn(SessionEvent) + Sync),
 ) -> SessionStats {
@@ -292,14 +293,14 @@ async fn run(
     };
     let mut session = match started {
         Started::Stopped => {
-            closer.close();
+            queue.close();
             info!("[{name}] stopped while connecting");
             emit(SessionEvent::Status(Status::Idle));
             abandon_start(start, name).await;
             return SessionStats::default();
         }
         Started::TimedOut => {
-            closer.close();
+            queue.close();
             let msg = format!(
                 "No answer within {} s. The firewall rule is likely missing (the receiver's timing requests are dropped).",
                 START_TIMEOUT.as_secs()
@@ -311,7 +312,7 @@ async fn run(
             return SessionStats::default();
         }
         Started::Done(Err(e)) => {
-            closer.close();
+            queue.close();
             warn!("[{name}] start failed: {e}");
             let msg = if firewall_like(&e) {
                 emit(SessionEvent::FirewallSuspected);
@@ -324,14 +325,12 @@ async fn run(
         }
         Started::Done(Ok(s)) => s,
     };
+    queue.start_feeding();
     info!("[{name}] streaming");
     emit(SessionEvent::Status(Status::Streaming));
     let mut error: Option<String> = None;
-    if (volume_pct - start_pct).abs() > 0.5
-        && let Err(e) = apply_volume(&mut session, name, volume_pct).await
-    {
-        error = Some(e);
-    }
+    // A volume asked for while a request (or the start) was waiting; sent next.
+    let mut volume = ((volume_pct - start_pct).abs() > 0.5).then_some(volume_pct);
 
     let ap2_stats = session.stats();
     // The loss window starts when streaming starts, with all counters at zero.
@@ -353,41 +352,53 @@ async fn run(
         }
     };
     let mut remote = session.take_remote_commands();
+    // After a slow request, carry on at the normal pace instead of catching up in a burst.
     let mut feedback = tokio::time::interval(FEEDBACK_INTERVAL);
+    feedback.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     feedback.tick().await;
     let mut report = tokio::time::interval(STATS_INTERVAL);
+    report.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     report.tick().await;
 
-    // Every control request below is bounded by CONTROL_TIMEOUT, so a Stop queued behind one
-    // is handled within that time even when the receiver has stopped answering. Commands are
-    // polled first (`biased`): after a slow request the keep-alive tick is due too, and taking
-    // it first could make Stop wait out a second request.
-    while error.is_none() {
+    // Control requests take commands while they wait ([`control`]), so a Stop is handled at
+    // once even when the receiver has stopped answering.
+    loop {
+        if let Some(p) = volume.take() {
+            match apply_volume(&mut session, name, p, &mut cmds, &mut volume).await {
+                Next::Continue => continue,
+                Next::Stop => break,
+                Next::Lost(e) => {
+                    error = Some(e);
+                    break;
+                }
+            }
+        }
         tokio::select! {
             biased;
             cmd = cmds.recv() => match cmd {
-                Some(SessionCmd::SetVolume(mut p)) => {
+                Some(SessionCmd::SetVolume(p)) => {
                     // Coalesce a burst of slider moves into the latest value.
+                    volume = Some(p);
                     let mut stop = false;
                     while let Ok(next) = cmds.try_recv() {
                         match next {
-                            SessionCmd::SetVolume(n) => p = n,
+                            SessionCmd::SetVolume(n) => volume = Some(n),
                             SessionCmd::Stop => { stop = true; break; }
                         }
                     }
                     if stop { break; }
-                    if let Err(e) = apply_volume(&mut session, name, p).await {
-                        error = Some(e);
-                    }
                 }
                 Some(SessionCmd::Stop) | None => break,
             },
-            _ = feedback.tick() => {
-                if let Err(e) = control(session.feedback()).await {
+            _ = feedback.tick() => match control(session.feedback(), &mut cmds, &mut volume).await {
+                Control::Answered(()) => {}
+                Control::Stopped => break,
+                Control::Failed(e) => {
                     warn!("[{name}] keep-alive failed: {e}");
                     error = Some(format!("Connection lost: {e}"));
+                    break;
                 }
-            }
+            },
             command = async {
                 match remote.as_mut() {
                     Some(rx) => rx.recv().await,
@@ -453,15 +464,50 @@ impl std::fmt::Display for ControlError {
     }
 }
 
-/// Runs one control request on a started session, bounded by [`CONTROL_TIMEOUT`]. Giving up
-/// the wait drops the request mid-flight, possibly with only part of its encrypted frame
-/// written, so the control connection cannot be trusted afterwards. That is fine only because
-/// every caller ends the session on a timeout ([`ControlError::NoAnswer`]), sending at most a
-/// TEARDOWN as a courtesy; nothing else is sent on that connection.
-async fn control<T>(request: impl Future<Output = Result<T, Ap2Error>>) -> Result<T, ControlError> {
-    match tokio::time::timeout(CONTROL_TIMEOUT, request).await {
-        Ok(r) => r.map_err(ControlError::Failed),
-        Err(_) => Err(ControlError::NoAnswer),
+/// What became of a control request.
+enum Control<T> {
+    Answered(T),
+    Failed(ControlError),
+    /// A Stop came in (or the owner went away) while it waited; the request was given up.
+    Stopped,
+}
+
+/// What the session loop does next.
+enum Next {
+    Continue,
+    Stop,
+    /// The connection is lost (with the message for the user).
+    Lost(String),
+}
+
+/// Runs one control request on a started session, bounded by [`CONTROL_TIMEOUT`], while still
+/// taking commands: a Stop gives the request up at once, and the latest volume asked for
+/// meanwhile is kept in `volume` for after it.
+///
+/// Giving up the wait drops the request mid-flight, possibly with only part of its encrypted
+/// frame written, so the control connection cannot be trusted afterwards. That is fine only
+/// because every caller then ends the session ([`ControlError::NoAnswer`] or
+/// [`Control::Stopped`]), sending at most a TEARDOWN; nothing else is sent on that connection.
+async fn control<T>(
+    request: impl Future<Output = Result<T, Ap2Error>>,
+    cmds: &mut mpsc::UnboundedReceiver<SessionCmd>,
+    volume: &mut Option<f32>,
+) -> Control<T> {
+    let request = tokio::time::timeout(CONTROL_TIMEOUT, request);
+    tokio::pin!(request);
+    loop {
+        tokio::select! {
+            biased;
+            cmd = cmds.recv() => match cmd {
+                Some(SessionCmd::SetVolume(p)) => *volume = Some(p),
+                Some(SessionCmd::Stop) | None => return Control::Stopped,
+            },
+            r = &mut request => return match r {
+                Ok(Ok(v)) => Control::Answered(v),
+                Ok(Err(e)) => Control::Failed(ControlError::Failed(e)),
+                Err(_) => Control::Failed(ControlError::NoAnswer),
+            },
+        }
     }
 }
 
@@ -471,24 +517,31 @@ pub fn finite_volume(pct: f32) -> Option<f32> {
     pct.is_finite().then(|| pct.clamp(0.0, 100.0))
 }
 
-/// Sets the receiver volume. `Err` (the session should end) only when the receiver did not
+/// Sets the receiver volume. The connection counts as lost only when the receiver did not
 /// answer; a refused change is just logged. A `pct` that is not a number is ignored, keeping
 /// the current volume.
-async fn apply_volume(session: &mut Ap2Session, name: &str, pct: f32) -> Result<(), String> {
+async fn apply_volume(
+    session: &mut Ap2Session,
+    name: &str,
+    pct: f32,
+    cmds: &mut mpsc::UnboundedReceiver<SessionCmd>,
+    volume: &mut Option<f32>,
+) -> Next {
     let Some(pct) = finite_volume(pct) else {
         warn!("[{name}] volume {pct} ignored (not a number)");
-        return Ok(());
+        return Next::Continue;
     };
     let db = pct_to_db(pct);
-    match control(session.set_volume(db)).await {
-        Ok(()) => debug!("[{name}] volume set to {pct:.0}% ({db:.1} dB)"),
-        Err(e @ ControlError::NoAnswer) => {
+    match control(session.set_volume(db), cmds, volume).await {
+        Control::Answered(()) => debug!("[{name}] volume set to {pct:.0}% ({db:.1} dB)"),
+        Control::Stopped => return Next::Stop,
+        Control::Failed(e @ ControlError::NoAnswer) => {
             warn!("[{name}] set volume failed: {e}");
-            return Err(format!("Connection lost: {e}"));
+            return Next::Lost(format!("Connection lost: {e}"));
         }
-        Err(e) => warn!("[{name}] set volume failed: {e}"),
+        Control::Failed(e) => warn!("[{name}] set volume failed: {e}"),
     }
-    Ok(())
+    Next::Continue
 }
 
 /// Whether a Stop is queued (or the owner has gone).
@@ -667,5 +720,47 @@ mod tests {
         assert!(last.window >= LOSS_WINDOW && last.window < LOSS_WINDOW + Duration::from_secs(10));
         assert_eq!(last.resend_requests_per_min, 0.0);
         assert_eq!(last.missed_per_min, 0.0);
+    }
+
+    /// A request the receiver never answers.
+    fn unanswered() -> impl Future<Output = Result<(), Ap2Error>> {
+        std::future::pending()
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_slow_answer_is_waited_for_and_no_answer_ends_it() {
+        let (handle, mut cmds) = SessionHandle::new(1);
+        let mut volume = None;
+        let start = tokio::time::Instant::now();
+        // An answer that takes as long as TCP resends on a lossy link still counts.
+        let slow = async {
+            tokio::time::sleep(Duration::from_secs(6)).await;
+            Ok(())
+        };
+        let r = control(slow, &mut cmds, &mut volume).await;
+        assert!(matches!(r, Control::Answered(())));
+        let start2 = tokio::time::Instant::now();
+        let r = control(unanswered(), &mut cmds, &mut volume).await;
+        assert!(matches!(r, Control::Failed(ControlError::NoAnswer)));
+        assert_eq!(start2 - start, Duration::from_secs(6));
+        assert_eq!(tokio::time::Instant::now() - start2, CONTROL_TIMEOUT);
+        drop(handle);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn stop_does_not_wait_for_a_request_and_volume_is_kept_for_later() {
+        let (handle, mut cmds) = SessionHandle::new(1);
+        let mut volume = None;
+        let start = tokio::time::Instant::now();
+        let stop_later = async {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            handle.set_volume(40.0);
+            handle.set_volume(55.0);
+            handle.stop();
+        };
+        let (r, ()) = tokio::join!(control(unanswered(), &mut cmds, &mut volume), stop_later);
+        assert!(matches!(r, Control::Stopped));
+        assert_eq!(tokio::time::Instant::now() - start, Duration::from_secs(1));
+        assert_eq!(volume, Some(55.0));
     }
 }

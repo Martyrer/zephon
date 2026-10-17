@@ -26,6 +26,8 @@ The UI uses the user's words, not the internal ones.
 | `(offline)` | **Offline** |
 | model `AudioAccessory5,1`, `AppleTV14,1` | **HomePod mini**, **Apple TV 4K**. Unknown models such as `TV-55` are shown as they are. |
 | `error: ...` | **Didn't connect.** followed by the cause and the fix, for example "No answer within 10 s. The firewall rule is likely missing." |
+| reconnect attempt 1 of 3 | **Reconnecting, attempt 1 of 3…** in amber; the footer reads **Reconnecting…** |
+| reconnect gave up | **Stopped playing.** followed by the first cause, "Reconnecting failed 3 times." and what to check |
 
 ## Concept
 

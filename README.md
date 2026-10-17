@@ -24,7 +24,8 @@ such as TuneBlade can still find a HomePod but can no longer play to it. Zephon 
 ## Features
 
 - Streams system audio from any playback device (WASAPI loopback), not just the default one.
-- Several rooms at once from one shared capture. A room that fails does not stop the others.
+- Several rooms at once from one shared capture. A room that fails does not stop the others, and
+  a room that loses its connection while playing reconnects by itself.
 - Per-room volume, applied live, and optionally following volume changes made on the phone or
   HomePod.
 - Per-room latency profile: **Low** (about 125 ms behind the PC), **Balanced** (165 ms, the
@@ -95,8 +96,9 @@ the app.
 
 - **Rooms are not synced.** Each room has its own session and clock. Expect an audible offset
   between rooms, even on the same profile.
-- **No auto-reconnect.** After a dropped connection, sleep and resume, or a receiver reboot,
-  press Play again.
+- **Reconnects only 3 times.** A room that loses its connection while playing is started again
+  after 2, 4 and 8 s. If that fails (for example after a long sleep or a receiver reboot), press
+  Play again. The `stream` command does not reconnect.
 - **DRM and exclusive-mode audio** cannot be captured by WASAPI loopback.
 - **Rooms are identified by name.** Two receivers with the same name show as one room. Give each
   receiver a unique name in the Home app.

@@ -38,7 +38,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 use crate::APP_TITLE;
-use crate::controller::{AppState, Command, Controller, ReceiverView, SHUTDOWN_TIMEOUT};
+use crate::controller::{AppState, Command, Controller, ReceiverView, Reconnect, SHUTDOWN_TIMEOUT};
 use crate::session::{LatencyProfile, Status};
 use crate::settings::Settings;
 
@@ -462,9 +462,19 @@ impl SenderView {
                 format!("{n} rooms")
             }
         };
+        let reconnecting = st
+            .receivers
+            .iter()
+            .any(|r| r.selected && matches!(r.reconnect, Reconnect::Attempt(_)));
+        // Once no room that is on is left playing or trying, the controller stops, so the
+        // button turns back into Play.
         let summary = if streaming {
             if playing > 0 {
                 lead_text("Playing", &format!("in {}", rooms(playing)), p.ink)
+            } else if reconnecting {
+                lead_text("Reconnecting…", "", p.ink)
+            } else if on == 0 {
+                StyledText::new("No rooms on")
             } else {
                 lead_text("Connecting…", "", p.ink)
             }

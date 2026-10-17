@@ -374,8 +374,8 @@ async fn cmd_stream(
         let id = i as u64 + 1;
         names.insert(id, spec.name.clone());
         profiles.insert(id, spec.profile);
-        let (src, closer) = hub.subscribe();
-        handles.push(session::spawn(id, spec, src, closer, ev_tx.clone()));
+        let (src, queue) = hub.subscribe();
+        handles.push(session::spawn(id, spec, src, queue, ev_tx.clone()));
     }
     drop(ev_tx);
 

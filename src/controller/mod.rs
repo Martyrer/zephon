@@ -31,13 +31,39 @@ pub const DISCOVERY_INTERVAL: Duration = Duration::from_secs(30);
 /// How long "resume on launch" waits for the rooms that were on to be found.
 pub const RESUME_WAIT: Duration = Duration::from_secs(10);
 /// How long closing the app waits for the sessions to tear down (the windows are already
-/// gone). A session's worst case is about 4.5 s: Stop waits out one control request in flight
-/// (up to 3 s), then up to 1.5 s for the TEARDOWN answer. A start that was given up on takes
+/// gone). A streaming session takes at most about 1.5 s: Stop gives up a control request in
+/// flight, then waits up to 1.5 s for the TEARDOWN answer. A start that was given up on takes
 /// at most 2 s + 1.5 s. The rest is margin for Nyx joining its threads.
 pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
 /// Settings are written once they have not changed for this long, so dragging a slider (many
 /// changes a second) writes the file once, not on every step.
 const SAVE_DELAY: Duration = Duration::from_millis(500);
+/// How many times a room that lost its connection while playing is started again before the
+/// app gives up on it.
+pub const RECONNECT_ATTEMPTS: u32 = 3;
+/// The wait before the first reconnect attempt. It doubles for each later attempt
+/// (exponential backoff: 2, 4, 8 s), so a receiver that is busy or rejoining Wi-Fi gets time.
+const RECONNECT_FIRST_WAIT: Duration = Duration::from_secs(2);
+
+/// How long a reconnected room must play before a new loss counts as a fresh one (attempt 1)
+/// rather than the next attempt.
+const RECONNECT_STABLE: Duration = Duration::from_secs(60);
+
+/// The wait before reconnect attempt `attempt` (1-based).
+fn reconnect_wait(attempt: u32) -> Duration {
+    RECONNECT_FIRST_WAIT * 2u32.saturating_pow(attempt.saturating_sub(1))
+}
+
+/// Where a room is in reconnecting after it lost its connection while playing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Reconnect {
+    #[default]
+    No,
+    /// Waiting for, or connecting in, this attempt (1 to [`RECONNECT_ATTEMPTS`]).
+    Attempt(u32),
+    /// Every attempt failed; the status holds the error.
+    GaveUp,
+}
 
 pub type Notifier = Arc<dyn Fn() + Send + Sync>;
 
@@ -66,6 +92,8 @@ pub struct ReceiverView {
     pub profile: LatencyProfile,
     /// The session is being restarted to apply a profile change.
     pub restarting: bool,
+    /// Reconnecting after the connection was lost while playing.
+    pub reconnect: Reconnect,
     /// A more robust profile suggested from recent loss ([`crate::advice::suggest_profile`]).
     pub suggestion: Option<LatencyProfile>,
     /// Hidden in the settings: left out of the Rooms list, never selected.
@@ -281,6 +309,7 @@ mod test_support {
             stats: None,
             profile: LatencyProfile::Balanced,
             restarting: false,
+            reconnect: Reconnect::No,
             suggestion: None,
             hidden: false,
         }

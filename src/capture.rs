@@ -79,15 +79,47 @@ const MAX_QUEUED_CHUNKS: usize = 100;
 #[derive(Default)]
 struct SessionQueue {
     chunks: Mutex<VecDeque<Arc<AudioChunk>>>,
+    /// The hub adds chunks only from the moment the session streams. Nyx's feeder reads from
+    /// the start, but its ring (about 0.25 s) fills while the receiver is still being set up;
+    /// the feeder then waits, so a slow start (over about 1.25 s) would overflow this queue.
+    /// The dropped chunks leave a gap that Nyx's drift estimate (frames counted against the
+    /// capture time since its first chunk) reads as a clock far too slow, which pins its
+    /// correction at the -500 ppm limit for many minutes.
+    feeding: AtomicBool,
     closed: AtomicBool,
 }
 
-/// Lets the owner of a session stop the hub from feeding its queue (e.g. once a start was
-/// given up on: Nyx's feeder thread keeps reading until that start has finished).
-#[derive(Clone)]
-pub struct QueueCloser(Arc<SessionQueue>);
+impl SessionQueue {
+    /// Adds a captured chunk if the session takes audio yet. `false` once the queue is
+    /// closed: the hub then forgets it.
+    fn offer(&self, chunk: &Arc<AudioChunk>) -> bool {
+        if self.closed.load(Ordering::Relaxed) {
+            return false;
+        }
+        if self.feeding.load(Ordering::Relaxed)
+            && let Ok(mut c) = self.chunks.lock()
+        {
+            if c.len() >= MAX_QUEUED_CHUNKS {
+                c.pop_front();
+            }
+            c.push_back(chunk.clone());
+        }
+        true
+    }
+}
 
-impl QueueCloser {
+/// Lets the owner of a session start the hub feeding its queue once it streams, and stop it
+/// (e.g. once a start was given up on: Nyx's feeder thread keeps reading until that start has
+/// finished).
+#[derive(Clone)]
+pub struct QueueControl(Arc<SessionQueue>);
+
+impl QueueControl {
+    /// Audio captured from now on goes to the session.
+    pub fn start_feeding(&self) {
+        self.0.feeding.store(true, Ordering::Relaxed);
+    }
+
     pub fn close(&self) {
         self.0.closed.store(true, Ordering::Relaxed);
         if let Ok(mut q) = self.0.chunks.lock() {
@@ -204,8 +236,9 @@ impl CaptureHub {
         &self.endpoint_name
     }
 
-    /// A new source for one session; it receives audio captured from now on.
-    pub fn subscribe(&self) -> (FanoutSource, QueueCloser) {
+    /// A new source for one session. It receives audio captured after
+    /// [`QueueControl::start_feeding`].
+    pub fn subscribe(&self) -> (FanoutSource, QueueControl) {
         let queue = Arc::new(SessionQueue::default());
         if let Ok(mut qs) = self.shared.queues.lock() {
             qs.push(Arc::downgrade(&queue));
@@ -216,7 +249,7 @@ impl CaptureHub {
                 sample_rate: self.sample_rate,
                 channels: self.channels,
             },
-            QueueCloser(queue),
+            QueueControl(queue),
         )
     }
 }
@@ -277,19 +310,7 @@ fn pump(mut source: WasapiLoopbackSource, shared: Arc<HubShared>, stop: Arc<Atom
                 let Ok(mut queues) = shared.queues.lock() else {
                     break;
                 };
-                queues.retain(|w| {
-                    let Some(q) = w.upgrade() else { return false };
-                    if q.closed.load(Ordering::Relaxed) {
-                        return false;
-                    }
-                    if let Ok(mut c) = q.chunks.lock() {
-                        if c.len() >= MAX_QUEUED_CHUNKS {
-                            c.pop_front();
-                        }
-                        c.push_back(chunk.clone());
-                    }
-                    true
-                });
+                queues.retain(|w| w.upgrade().is_some_and(|q| q.offer(&chunk)));
                 drop(queues);
                 // Checked after the read, so at the edges of a rebuild one chunk may be paced
                 // wrongly: at most one short extra wait, or one unpaced chunk.
@@ -442,5 +463,32 @@ mod tests {
         // Real audio in between resets the clock.
         assert_eq!(p.after_chunk(later, CHUNK, false), Duration::ZERO);
         assert_eq!(p.after_chunk(later, CHUNK, true), CHUNK);
+    }
+
+    #[test]
+    fn a_session_gets_only_audio_captured_once_it_streams() {
+        let queue = Arc::new(SessionQueue::default());
+        let control = QueueControl(queue.clone());
+        let mut source = FanoutSource {
+            queue: queue.clone(),
+            sample_rate: 48_000,
+            channels: 2,
+        };
+        let t0 = Instant::now();
+        let chunk = |i: u32| Arc::new(AudioChunk::new(vec![0.0; 960], 48_000, 2, t0 + i * CHUNK));
+        let read = |s: &mut FanoutSource| s.read_chunk(480).unwrap().map(|c| c.timestamp);
+        // Captured while the receiver is still being set up: not kept for later.
+        for i in 0..3 {
+            assert!(queue.offer(&chunk(i)));
+        }
+        assert_eq!(read(&mut source), None);
+        control.start_feeding();
+        assert!(queue.offer(&chunk(3)));
+        assert!(queue.offer(&chunk(4)));
+        assert_eq!(read(&mut source), Some(t0 + 3 * CHUNK));
+        assert_eq!(read(&mut source), Some(t0 + 4 * CHUNK));
+        control.close();
+        assert!(!queue.offer(&chunk(5)));
+        assert_eq!(read(&mut source), None);
     }
 }

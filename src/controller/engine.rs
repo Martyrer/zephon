@@ -19,7 +19,8 @@ use crate::settings::{self, Settings};
 
 use super::{
     AppState, Command, DEFAULT_VOLUME_PCT, DISCOVERY_INTERVAL, EndpointView, Msg, Notifier,
-    RESUME_WAIT, ReceiverView, ResumeStep, SAVE_DELAY, SHUTDOWN_TIMEOUT, demo, lock, resume_step,
+    RECONNECT_ATTEMPTS, RECONNECT_STABLE, RESUME_WAIT, ReceiverView, Reconnect, ResumeStep,
+    SAVE_DELAY, SHUTDOWN_TIMEOUT, demo, lock, reconnect_wait, resume_step,
 };
 
 enum Internal {
@@ -30,6 +31,20 @@ enum Internal {
     Firewall(u64, FirewallState),
     /// The capture endpoint has been opened for Start (tagged with the attempt).
     Capture(u64, Result<CaptureHub, String>),
+}
+
+/// A room that lost its connection while playing and is being started again.
+struct PendingReconnect {
+    /// 1 to [`RECONNECT_ATTEMPTS`].
+    attempt: u32,
+    /// When the attempt starts; `None` while the failed session is still ending, or while the
+    /// attempt is connecting or playing.
+    at: Option<Instant>,
+    /// When the attempt started playing. Once it has played for [`RECONNECT_STABLE`], a new
+    /// loss starts the count afresh.
+    playing_since: Option<Instant>,
+    /// Why the connection was first lost, for the message when the app gives up.
+    cause: String,
 }
 
 /// Where the sessions get their audio.
@@ -96,6 +111,8 @@ pub(super) struct Engine {
     /// Receivers to start again once their current session has ended: one session per
     /// receiver at a time (a profile change, Stop then Play, or off then on).
     restart: HashSet<String>,
+    /// Rooms that lost their connection while playing, by name.
+    reconnects: HashMap<String, PendingReconnect>,
     firewall_jobs: FirewallJobs,
     /// Waiting to resume playing (on launch) until the rooms are found, up to this time.
     resume_until: Option<Instant>,
@@ -148,6 +165,7 @@ impl Engine {
             next_id: 1,
             probing: HashSet::new(),
             restart: HashSet::new(),
+            reconnects: HashMap::new(),
             firewall_jobs: FirewallJobs::default(),
             resume_until: None,
             save_at: None,
@@ -176,6 +194,7 @@ impl Engine {
         tokio::pin!(early_rebrowse);
         let mut early_done = false;
         loop {
+            let reconnect_at = self.next_reconnect();
             tokio::select! {
                 msg = rx.recv() => match msg {
                     Some(Msg::Cmd(c)) => self.handle(c),
@@ -200,6 +219,8 @@ impl Engine {
                     if self.resume_until.is_some() => self.try_resume(true),
                 _ = tokio::time::sleep_until(self.save_at.unwrap_or_else(Instant::now)),
                     if self.save_at.is_some() => self.write_settings(),
+                _ = tokio::time::sleep_until(reconnect_at.unwrap_or_else(Instant::now)),
+                    if reconnect_at.is_some() => self.start_due_reconnects(),
             }
             (self.notify)();
         }
@@ -291,6 +312,7 @@ impl Engine {
                         self.start_session(&name);
                     } else {
                         self.cancel_restart(&name);
+                        self.cancel_reconnect(&name);
                         if let Some(h) = self.sessions.get(&name) {
                             h.stop();
                         }
@@ -666,8 +688,8 @@ impl Engine {
         self.next_id += 1;
         let handle = match &self.hub {
             Some(Audio::Hub(hub)) => {
-                let (source, closer) = hub.subscribe();
-                session::spawn(id, spec, source, closer, self.ev_tx.clone())
+                let (source, queue) = hub.subscribe();
+                session::spawn(id, spec, source, queue, self.ev_tx.clone())
             }
             Some(Audio::Demo) => demo::spawn_session(id, spec.name, self.ev_tx.clone()),
             None => return,
@@ -683,8 +705,146 @@ impl Engine {
             r.stats = None;
             r.suggestion = None;
             r.restarting = false;
+            r.reconnect = Reconnect::No;
         }
         self.restart.remove(name);
+        // A start for any other reason (Play, switch on, profile change) is a fresh one.
+        self.reconnects.remove(name);
+    }
+
+    /// Forgets a pending reconnect (the room is stopping for good).
+    fn cancel_reconnect(&mut self, name: &str) {
+        if self.reconnects.remove(name).is_some()
+            && let Some(r) = lock(&self.state)
+                .receivers
+                .iter_mut()
+                .find(|r| r.name == name)
+        {
+            r.reconnect = Reconnect::No;
+            // It showed "Reconnecting" while it waited for the next attempt.
+            r.status = Status::Idle;
+        }
+    }
+
+    /// When the next reconnect attempt is due.
+    fn next_reconnect(&self) -> Option<Instant> {
+        self.reconnects.values().filter_map(|p| p.at).min()
+    }
+
+    /// Starts every reconnect attempt that is due.
+    fn start_due_reconnects(&mut self) {
+        let now = Instant::now();
+        let due: Vec<String> = self
+            .reconnects
+            .iter()
+            .filter(|(_, p)| p.at.is_some_and(|at| at <= now))
+            .map(|(name, _)| name.clone())
+            .collect();
+        for name in due {
+            let wanted = {
+                let st = lock(&self.state);
+                st.streaming && st.receivers.iter().any(|r| r.name == name && r.selected)
+            };
+            // Stop and switching the room off cancel reconnects already; this is a backstop.
+            if !wanted || self.hub.is_none() {
+                self.cancel_reconnect(&name);
+                continue;
+            }
+            // start_session forgets the reconnect, as any fresh start does; it is put back so
+            // the attempt's outcome counts.
+            let Some(mut pending) = self.reconnects.remove(&name) else {
+                continue;
+            };
+            info!(
+                "[{name}] reconnect attempt {} of {RECONNECT_ATTEMPTS}",
+                pending.attempt
+            );
+            self.start_session(&name);
+            pending.at = None;
+            if let Some(r) = lock(&self.state)
+                .receivers
+                .iter_mut()
+                .find(|r| r.name == name)
+            {
+                r.reconnect = Reconnect::Attempt(pending.attempt);
+            }
+            self.reconnects.insert(name, pending);
+        }
+    }
+
+    /// A session failed. A room that was playing (or reconnecting) is started again, up to
+    /// [`RECONNECT_ATTEMPTS`] times; a failed first start shows its error as it is.
+    fn on_session_error(&mut self, name: &str, msg: String) {
+        let mut st = lock(&self.state);
+        let streaming = st.streaming;
+        let Some(r) = st.receivers.iter_mut().find(|r| r.name == name) else {
+            return;
+        };
+        // A reconnect that has played for a while counts as a success: a new loss starts afresh.
+        // One that drops again soon counts as a failed attempt, so a link that keeps dropping
+        // ends in "gave up" instead of reconnecting forever.
+        let now = Instant::now();
+        let prev = self.reconnects.get(name).filter(|p| {
+            p.playing_since
+                .is_none_or(|t| now.duration_since(t) < RECONNECT_STABLE)
+        });
+        let lost = r.status == Status::Streaming || prev.is_some();
+        if !(lost && streaming && r.selected) {
+            r.status = Status::Error(msg);
+            return;
+        }
+        let attempt = prev.map_or(1, |p| p.attempt + 1);
+        let cause = prev.map_or_else(|| msg.clone(), |p| p.cause.clone());
+        r.stats = None;
+        r.suggestion = None;
+        if attempt > RECONNECT_ATTEMPTS {
+            warn!("[{name}] {msg}; giving up after {RECONNECT_ATTEMPTS} reconnect attempts");
+            self.reconnects.remove(name);
+            r.reconnect = Reconnect::GaveUp;
+            r.status = Status::Error(format!(
+                "{cause}. Reconnecting failed {RECONNECT_ATTEMPTS} times. Check that the \
+                 speaker is on and has a good Wi-Fi signal, then try again."
+            ));
+            return;
+        }
+        warn!("[{name}] {msg}; will reconnect (attempt {attempt} of {RECONNECT_ATTEMPTS})");
+        // The attempt is timed once this session has ended (on_session_event).
+        self.reconnects.insert(
+            name.to_string(),
+            PendingReconnect {
+                attempt,
+                at: None,
+                playing_since: None,
+                cause,
+            },
+        );
+        r.reconnect = Reconnect::Attempt(attempt);
+        r.status = Status::Connecting;
+    }
+
+    /// Stops once every room that is on has failed and none is playing, connecting or waiting
+    /// to reconnect: nothing is left to play, so the footer offers Play again.
+    fn stop_if_all_failed(&mut self) {
+        if self.hub.is_none()
+            || self.opening.is_some()
+            || !self.sessions.is_empty()
+            || !self.restart.is_empty()
+            || !self.reconnects.is_empty()
+        {
+            return;
+        }
+        let failed = {
+            let st = lock(&self.state);
+            st.streaming
+                && st
+                    .receivers
+                    .iter()
+                    .any(|r| r.selected && matches!(r.status, Status::Error(_)))
+        };
+        if failed {
+            info!("No room left playing; stopping");
+            self.stop();
+        }
     }
 
     /// Forgets a pending restart (the session is stopping for good).
@@ -704,6 +864,9 @@ impl Engine {
     fn stop(&mut self) {
         for name in self.restart.iter().cloned().collect::<Vec<_>>() {
             self.cancel_restart(&name);
+        }
+        for name in self.reconnects.keys().cloned().collect::<Vec<_>>() {
+            self.cancel_reconnect(&name);
         }
         for h in self.sessions.values() {
             h.stop();
@@ -751,8 +914,21 @@ impl Engine {
                     } else {
                         self.cancel_restart(&name);
                     }
+                } else if let Some(p) = self.reconnects.get_mut(&name)
+                    && p.at.is_none()
+                    && p.playing_since.is_none()
+                {
+                    // Timed from now: one session per receiver at a time.
+                    let wait = reconnect_wait(p.attempt);
+                    p.at = Some(Instant::now() + wait);
+                    info!(
+                        "[{name}] reconnect attempt {} of {RECONNECT_ATTEMPTS} in {} s",
+                        p.attempt,
+                        wait.as_secs()
+                    );
                 }
             }
+            self.stop_if_all_failed();
             return;
         }
         // Ignore stale sessions, and the old session's last events during a restart.
@@ -760,6 +936,8 @@ impl Engine {
             return;
         }
         match ev {
+            // It played before, so the firewall is not why a reconnect attempt timed out.
+            SessionEvent::FirewallSuspected if self.reconnects.contains_key(&name) => {}
             SessionEvent::FirewallSuspected => {
                 lock(&self.state).firewall_suspected = true;
                 self.handle(Command::CheckFirewall);
@@ -783,6 +961,22 @@ impl Engine {
                 }
                 self.settings.set_volume(&name, p);
                 self.save();
+            }
+            SessionEvent::Status(Status::Error(msg)) => self.on_session_error(&name, msg),
+            SessionEvent::Status(Status::Streaming) if self.reconnects.contains_key(&name) => {
+                // Kept until it has played for RECONNECT_STABLE (on_session_error).
+                if let Some(p) = self.reconnects.get_mut(&name) {
+                    p.playing_since = Some(Instant::now());
+                }
+                info!("[{name}] reconnected");
+                if let Some(r) = lock(&self.state)
+                    .receivers
+                    .iter_mut()
+                    .find(|r| r.name == name)
+                {
+                    r.reconnect = Reconnect::No;
+                    r.status = Status::Streaming;
+                }
             }
             other => {
                 let mut st = lock(&self.state);
@@ -903,6 +1097,7 @@ impl Engine {
                         status: Status::Idle,
                         stats: None,
                         restarting: false,
+                        reconnect: Reconnect::No,
                         suggestion: None,
                     });
                 }
@@ -1622,6 +1817,160 @@ mod tests {
                     .as_deref()
                     .is_some_and(|m| m.starts_with("Didn't resume playing"))
             );
+        })
+        .await;
+    }
+
+    fn lost(e: &mut Engine, id: u64, why: &str) {
+        e.on_session_event(id, SessionEvent::Status(Status::Error(why.into())));
+        e.on_session_event(id, SessionEvent::Ended(SessionStats::default()));
+    }
+
+    /// Moves paused time to just before the next reconnect is due, checks nothing starts, then
+    /// to when it is due. Returns the wait and the new attempt's session.
+    async fn wait_for_reconnect(e: &mut Engine, name: &str) -> (Duration, u64) {
+        let from = Instant::now();
+        let at = e.next_reconnect().expect("a reconnect is scheduled");
+        tokio::time::advance(at - from - Duration::from_millis(1)).await;
+        e.start_due_reconnects();
+        assert_eq!(session_id(e, name), None, "started before it was due");
+        tokio::time::advance(Duration::from_millis(1)).await;
+        e.start_due_reconnects();
+        let id = session_id(e, name).expect("the attempt has started");
+        (at - from, id)
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_lost_room_reconnects_with_growing_waits_then_gives_up_and_stops() {
+        let mut e = demo_engine(&["Kitchen"]);
+        let (mut id, _cmds) = stand_in_session(&mut e, "Kitchen");
+        e.on_session_event(id, SessionEvent::Status(Status::Streaming));
+        let mut waits = Vec::new();
+        for attempt in 1..=RECONNECT_ATTEMPTS {
+            let why = if attempt == 1 {
+                "Connection lost: connection closed by receiver"
+            } else {
+                "No answer within 10 s."
+            };
+            lost(&mut e, id, why);
+            let r = view(&e, "Kitchen");
+            assert_eq!(
+                (r.reconnect, r.status),
+                (Reconnect::Attempt(attempt), Status::Connecting)
+            );
+            assert!(lock(&e.state).streaming);
+            let (wait, next) = wait_for_reconnect(&mut e, "Kitchen").await;
+            waits.push(wait);
+            id = next;
+            // A timed-out attempt is not the firewall: the room played before.
+            e.on_session_event(id, SessionEvent::FirewallSuspected);
+            assert!(!lock(&e.state).firewall_suspected);
+        }
+        let secs = Duration::from_secs;
+        assert_eq!(waits, [secs(2), secs(4), secs(8)]);
+        lost(&mut e, id, "No answer within 10 s.");
+        let r = view(&e, "Kitchen");
+        assert_eq!(r.reconnect, Reconnect::GaveUp);
+        // The message keeps the first cause, not the last attempt's timeout.
+        assert!(
+            matches!(&r.status, Status::Error(m) if m.starts_with("Connection lost: connection closed by receiver."))
+        );
+        // Nothing is left playing, so the app stops (the footer offers Play).
+        assert!(!lock(&e.state).streaming);
+        assert_eq!(e.next_reconnect(), None);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn only_a_reconnect_that_keeps_playing_starts_the_count_afresh() {
+        let mut e = demo_engine(&["Kitchen"]);
+        let (id, _cmds) = stand_in_session(&mut e, "Kitchen");
+        e.on_session_event(id, SessionEvent::Status(Status::Streaming));
+        lost(&mut e, id, "Connection lost: connection closed by receiver");
+        let (_, id) = wait_for_reconnect(&mut e, "Kitchen").await;
+        e.on_session_event(id, SessionEvent::Status(Status::Connecting));
+        assert_eq!(view(&e, "Kitchen").reconnect, Reconnect::Attempt(1));
+        e.on_session_event(id, SessionEvent::Status(Status::Streaming));
+        let r = view(&e, "Kitchen");
+        assert_eq!((r.reconnect, r.status), (Reconnect::No, Status::Streaming));
+        // Dropped again soon after: that attempt failed, so the count goes on.
+        tokio::time::advance(RECONNECT_STABLE - Duration::from_secs(1)).await;
+        lost(&mut e, id, "Connection lost: no answer within 10 s");
+        assert_eq!(view(&e, "Kitchen").reconnect, Reconnect::Attempt(2));
+        let (_, id) = wait_for_reconnect(&mut e, "Kitchen").await;
+        e.on_session_event(id, SessionEvent::Status(Status::Streaming));
+        // Played long enough: the next loss is a fresh one.
+        tokio::time::advance(RECONNECT_STABLE).await;
+        lost(&mut e, id, "Connection lost: no answer within 10 s");
+        assert_eq!(view(&e, "Kitchen").reconnect, Reconnect::Attempt(1));
+        assert_eq!(
+            e.next_reconnect(),
+            Some(Instant::now() + Duration::from_secs(2))
+        );
+    }
+
+    #[test]
+    fn a_failed_first_start_is_not_retried_and_stops_once_no_room_plays() {
+        let mut e = demo_engine(&["Kitchen", "Living Room"]);
+        let (kitchen, _k) = stand_in_session(&mut e, "Kitchen");
+        let (living, _l) = stand_in_session(&mut e, "Living Room");
+        e.on_session_event(living, SessionEvent::Status(Status::Streaming));
+        e.on_session_event(kitchen, SessionEvent::Status(Status::Connecting));
+        lost(&mut e, kitchen, "No answer within 10 s.");
+        let r = view(&e, "Kitchen");
+        assert_eq!(r.reconnect, Reconnect::No);
+        assert!(matches!(r.status, Status::Error(_)));
+        assert_eq!(e.next_reconnect(), None);
+        // Living Room still plays.
+        assert!(lock(&e.state).streaming);
+        // Switched off, it ends normally; the only room left on has failed.
+        e.handle(Command::SetSelected("Living Room".into(), false));
+        e.on_session_event(living, SessionEvent::Status(Status::Idle));
+        e.on_session_event(living, SessionEvent::Ended(SessionStats::default()));
+        assert!(!lock(&e.state).streaming);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn switching_off_or_stop_cancels_a_pending_reconnect() {
+        for stop in [false, true] {
+            let mut e = demo_engine(&["Kitchen"]);
+            let (id, _cmds) = stand_in_session(&mut e, "Kitchen");
+            e.on_session_event(id, SessionEvent::Status(Status::Streaming));
+            lost(&mut e, id, "Connection lost: connection closed by receiver");
+            if stop {
+                e.handle(Command::Stop);
+            } else {
+                e.handle(Command::SetSelected("Kitchen".into(), false));
+            }
+            let r = view(&e, "Kitchen");
+            assert_eq!((r.reconnect, r.status), (Reconnect::No, Status::Idle));
+            assert_eq!(e.next_reconnect(), None);
+            tokio::time::advance(Duration::from_secs(60)).await;
+            e.start_due_reconnects();
+            assert_eq!(session_id(&e, "Kitchen"), None);
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn the_engine_loop_starts_a_reconnect_when_it_is_due() {
+        let mut e = demo_engine(&["Kitchen"]);
+        let (id, _cmds) = stand_in_session(&mut e, "Kitchen");
+        e.on_session_event(id, SessionEvent::Status(Status::Streaming));
+        lost(&mut e, id, "Connection lost: connection closed by receiver");
+        let state = e.state.clone();
+        let kitchen = move || {
+            lock(&state)
+                .receivers
+                .iter()
+                .find(|r| r.name == "Kitchen")
+                .map(|r| r.status.clone())
+        };
+        run_beside(e, |tx| async move {
+            let _tx = tx;
+            // The demo session plays 1 s after it starts, which is 2 s after the loss.
+            tokio::time::sleep(Duration::from_millis(2990)).await;
+            assert_ne!(kitchen(), Some(Status::Streaming));
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            assert_eq!(kitchen(), Some(Status::Streaming));
         })
         .await;
     }
