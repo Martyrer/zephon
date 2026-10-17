@@ -48,6 +48,9 @@ use style::{Fonts, Palette, TypeExt as _, lead_text};
 
 /// While the user drags a slider, controller snapshots do not move it (they may lag).
 const USER_VOLUME_HOLD: Duration = Duration::from_millis(1500);
+/// After a profile is picked, controller snapshots do not move the picker back until they
+/// show it (the controller applies it a moment later) or this long has passed.
+const PROFILE_HOLD: Duration = Duration::from_millis(1500);
 /// Minimum gap between live volume commands while dragging (the final value is always sent).
 const VOLUME_SEND_INTERVAL: Duration = Duration::from_millis(80);
 /// Below this width the room controls stack (DESIGN.md, "Narrow").
@@ -99,7 +102,21 @@ impl SearchableListItem for EndpointItem {
     }
 }
 
-/// "Balanced" for the select; the lag figure follows in Ink 2.
+/// The profile's position on the room's profile picker.
+fn profile_index(p: LatencyProfile) -> f32 {
+    LatencyProfile::ALL
+        .iter()
+        .position(|&q| q == p)
+        .unwrap_or(0) as f32
+}
+
+/// The profile at a picker position (rounded, clamped to the ends).
+fn profile_at(v: f32) -> LatencyProfile {
+    let last = LatencyProfile::ALL.len() - 1;
+    LatencyProfile::ALL[(v.round().max(0.) as usize).min(last)]
+}
+
+/// "Balanced": the profile's name in the picker, the settings select and messages.
 fn profile_title(p: LatencyProfile) -> &'static str {
     match p {
         LatencyProfile::Low => "Low",
@@ -175,7 +192,21 @@ struct RowWidgets {
     value: f32,
     last_user: Option<Instant>,
     last_sent: Option<Instant>,
-    profile: Entity<SelectState<Vec<ProfileItem>>>,
+    /// The profile picker: a slider over the indexes of [`LatencyProfile::ALL`].
+    profile: Entity<SliderState>,
+    /// The picker's thumb is held, so a state snapshot must not move it.
+    profile_held: bool,
+    /// The profile last sent, until a snapshot shows it (see [`PROFILE_HOLD`]).
+    profile_sent: Option<(LatencyProfile, Instant)>,
+}
+
+/// The profile sent from the picker that snapshots must not undo yet: kept until the
+/// controller's `current` profile matches it or [`PROFILE_HOLD`] has passed.
+fn profile_pending(
+    sent: Option<(LatencyProfile, Instant)>,
+    current: LatencyProfile,
+) -> Option<(LatencyProfile, Instant)> {
+    sent.filter(|&(p, at)| p != current && at.elapsed() < PROFILE_HOLD)
 }
 
 struct SenderView {
@@ -275,12 +306,12 @@ impl SenderView {
             }
         });
 
-        // One profile select and one volume slider per room; receiver-reported volume
+        // One volume slider and one profile picker per room; receiver-reported volume
         // moves the slider.
         let receivers = self.state.receivers.clone();
         for r in &receivers {
             if !self.rows.contains_key(&r.name) {
-                self.add_row(r, window, cx);
+                self.add_row(r, cx);
             }
             let Some(row) = self.rows.get_mut(&r.name) else {
                 continue;
@@ -293,32 +324,72 @@ impl SenderView {
                 row.slider
                     .update(cx, |s, cx| s.set_value(r.volume_pct, window, cx));
             }
-            row.profile.update(cx, |sel, cx| {
-                if sel.selected_value() != Some(&r.profile) {
-                    sel.set_selected_value(&r.profile, window, cx);
-                }
-            });
+            row.profile_sent = profile_pending(row.profile_sent, r.profile);
+            if !row.profile_held && row.profile_sent.is_none() {
+                let at = profile_index(r.profile);
+                row.profile.update(cx, |s, cx| {
+                    if s.value().end() != at {
+                        s.set_value(at, window, cx);
+                    }
+                });
+            }
         }
         cx.notify();
     }
 
-    fn add_row(&mut self, r: &ReceiverView, window: &mut Window, cx: &mut Context<Self>) {
-        let profiles: Vec<ProfileItem> = LatencyProfile::ALL
+    /// Sends a profile picked for `name`, unless it is the room's profile already (or was
+    /// just sent).
+    fn pick_profile(&mut self, name: &str, p: LatencyProfile) {
+        let current = self
+            .state
+            .receivers
             .iter()
-            .map(|p| ProfileItem(*p))
-            .collect();
-        // `refresh` selects the receiver's profile right after this.
-        let profile = cx.new(|cx| SelectState::new(profiles, None, window, cx));
+            .find(|r| r.name == name)
+            .map(|r| r.profile);
+        let Some(row) = self.rows.get_mut(name) else {
+            return;
+        };
+        if row.profile_sent.map(|(s, _)| s).or(current) == Some(p) {
+            return;
+        }
+        row.profile_sent = Some((p, Instant::now()));
+        self.ctl.send(Command::SetProfile(name.to_string(), p));
+    }
+
+    fn add_row(&mut self, r: &ReceiverView, cx: &mut Context<Self>) {
+        let profile = cx.new(|_| {
+            SliderState::new()
+                .min(0.0)
+                .max((LatencyProfile::ALL.len() - 1) as f32)
+                .step(1.0)
+                .default_value(profile_index(r.profile))
+        });
+        // A profile change restarts the room's session, so a drag sends it once, on release.
         let name = r.name.clone();
-        self.subscriptions.push(cx.subscribe(
-            &profile,
-            move |this, _, ev: &SelectEvent<Vec<ProfileItem>>, _| {
-                let SelectEvent::Confirm(Some(p)) = ev else {
+        self.subscriptions.push(
+            cx.subscribe(&profile, move |this, _, ev: &SliderEvent, cx| {
+                let Some(row) = this.rows.get_mut(&name) else {
                     return;
                 };
-                this.ctl.send(Command::SetProfile(name.clone(), *p));
-            },
-        ));
+                match ev {
+                    SliderEvent::Change(_) => row.profile_held = true,
+                    SliderEvent::Release(v) => {
+                        row.profile_held = false;
+                        this.pick_profile(&name, profile_at(v.end()));
+                    }
+                }
+                cx.notify();
+            }),
+        );
+        // A label click and the slider's accessibility actions set the value without a
+        // slider event; any value that differs from the room's profile is a pick.
+        let name = r.name.clone();
+        self.subscriptions
+            .push(cx.observe(&profile, move |this, state, cx| {
+                if this.rows.get(&name).is_some_and(|row| !row.profile_held) {
+                    this.pick_profile(&name, profile_at(state.read(cx).value().end()));
+                }
+            }));
 
         let slider = cx.new(|_| {
             SliderState::new()
@@ -358,6 +429,8 @@ impl SenderView {
                 last_user: None,
                 last_sent: None,
                 profile,
+                profile_held: false,
+                profile_sent: None,
             },
         );
     }
@@ -701,4 +774,37 @@ pub fn run() {
     });
     // The windows are gone: TEARDOWN every session (bounded) before the process exits.
     on_exit.shutdown(SHUTDOWN_TIMEOUT);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use super::{PROFILE_HOLD, profile_at, profile_index, profile_pending};
+    use crate::session::LatencyProfile;
+
+    #[test]
+    fn a_sent_profile_holds_until_the_controller_shows_it_or_the_hold_ends() {
+        use LatencyProfile::*;
+        let now = Instant::now();
+        let sent = Some((Stable, now));
+        // The snapshot still has the old profile: the picker keeps the new one.
+        assert_eq!(profile_pending(sent, Balanced), sent);
+        // The controller applied it.
+        assert_eq!(profile_pending(sent, Stable), None);
+        // It never did: the picker follows the controller again.
+        let old = now.checked_sub(PROFILE_HOLD + Duration::from_millis(1));
+        assert_eq!(profile_pending(old.map(|t| (Stable, t)), Balanced), None);
+        assert_eq!(profile_pending(None, Balanced), None);
+    }
+
+    #[test]
+    fn picker_positions_map_to_profiles() {
+        for p in LatencyProfile::ALL {
+            assert_eq!(profile_at(profile_index(p)), p);
+        }
+        // Out-of-range values clamp to the ends.
+        assert_eq!(profile_at(-1.0), LatencyProfile::Low);
+        assert_eq!(profile_at(7.0), LatencyProfile::Stable);
+    }
 }

@@ -1,6 +1,7 @@
-//! Small building blocks: icons, the Windows 11 switch and volume slider, icon buttons.
+//! Small building blocks: icons, the Windows 11 switch and volume slider, the profile picker,
+//! icon buttons.
 //!
-//! The switch and the slider are styled on gpui-base's unstyled primitives (which own the
+//! The switch and the sliders are styled on gpui-base's unstyled primitives (which own the
 //! interaction, focus and accessibility), because gpui-kit's styled versions cannot take the
 //! Windows look: an outlined off track with an Ink 2 thumb, a 20 px slider thumb with a
 //! Lagoon inner dot on a Track-colored rail.
@@ -21,6 +22,8 @@ pub const GLYPH: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 pub const GEAR: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M12.90 5.97L13.12 6.63L14.90 6.84L14.90 9.16L13.12 9.37L12.90 10.03L12.59 10.65L13.70 12.06L12.06 13.70L10.65 12.59L10.03 12.90L9.37 13.12L9.16 14.90L6.84 14.90L6.63 13.12L5.97 12.90L5.35 12.59L3.94 13.70L2.30 12.06L3.41 10.65L3.10 10.03L2.88 9.37L1.10 9.16L1.10 6.84L2.88 6.63L3.10 5.97L3.41 5.35L2.30 3.94L3.94 2.30L5.35 3.41L5.97 3.10L6.63 2.88L6.84 1.10L9.16 1.10L9.37 2.88L10.03 3.10L10.65 3.41L12.06 2.30L13.70 3.94L12.59 5.35Z" fill="none" stroke="black" stroke-width="1.2" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.3" fill="none" stroke="black" stroke-width="1.2"/></svg>"#;
 pub const REFRESH: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3.2h-3.2" fill="none" stroke="black" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>"#;
 pub const SPEAKER: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M2 6v4h2.6L8 13V3L4.6 6z" fill="none" stroke="black" stroke-width="1.2" stroke-linejoin="round"/><path d="M10.6 5.6a3.4 3.4 0 0 1 0 4.8M12.4 3.8a6 6 0 0 1 0 8.4" fill="none" stroke="black" stroke-width="1.2" stroke-linecap="round"/></svg>"#;
+/// Latency profile: a clock face.
+pub const CLOCK: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="black" stroke-width="1.2"/><path d="M8 4.6V8l2.4 1.5" fill="none" stroke="black" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>"#;
 pub const PLAY: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14"><path d="M3.5 2.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L4.4 1.7a.6.6 0 0 0-.9.5z" fill="black"/></svg>"#;
 pub const STOP: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14"><rect x="2.5" y="2.5" width="9" height="9" rx="1.5" fill="black"/></svg>"#;
 pub const WARN: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1.8L15 14H1z" fill="none" stroke="black" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 6.2v3.6" stroke="black" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.8" r=".85" fill="black"/></svg>"#;
@@ -125,58 +128,100 @@ pub fn switch(
 pub fn volume_slider(state: &Entity<SliderState>, cx: &App) -> impl IntoElement {
     let p = Palette::of(cx);
     let pct = state.read(cx).percentage().end;
-    base::Slider::new(state).flex_1().min_w(px(80.)).child(
-        base::SliderTrack::new(state)
-            .flex()
-            .items_center()
-            .h(px(20.))
-            .w_full()
-            .child(
-                base::SliderIndicator::new(state)
-                    .relative()
-                    .w_full()
-                    .h(px(4.))
-                    .rounded(px(2.))
-                    .bg(p.track)
-                    .child(
-                        div()
-                            .absolute()
-                            .h_full()
-                            .left_0()
-                            .right(relative(1. - pct))
-                            .rounded(px(2.))
-                            .bg(p.lagoon),
-                    )
-                    .child(
-                        base::SliderThumb::new(state)
-                            .group("thumb")
-                            .absolute()
-                            .top(px(-8.))
-                            .left(relative(pct))
-                            .ml(px(-10.))
-                            .size(px(20.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded_full()
-                            .bg(p.thumb)
-                            .border_1()
-                            .border_color(p.stroke_strong)
-                            .shadow(vec![BoxShadow {
-                                color: hsla(0., 0., 0., 0.16),
-                                offset: point(px(0.), px(1.)),
-                                blur_radius: px(2.),
-                                spread_radius: px(0.),
-                                inset: false,
-                            }])
-                            .child(
-                                div()
-                                    .size(px(12.))
-                                    .rounded_full()
-                                    .bg(p.lagoon)
-                                    .group_hover("thumb", |this| this.size(px(14.))),
-                            ),
-                    ),
-            ),
-    )
+    slider_track(state, &p)
+        .child(
+            div()
+                .absolute()
+                .h_full()
+                .left_0()
+                .right(relative(1. - pct))
+                .rounded(px(2.))
+                .bg(p.lagoon),
+        )
+        .child(thumb(state, pct, &p))
+        .into_slider(state)
+}
+
+/// The latency profile picker: the volume slider's rail and thumb, with no fill and a hollow
+/// stop at each profile. The thumb sits on the chosen stop, not under the pointer, so a drag
+/// shows where it will land on release.
+pub fn profile_picker(state: &Entity<SliderState>, cx: &App) -> impl IntoElement {
+    let p = Palette::of(cx);
+    let s = state.read(cx);
+    let last = s.max_value().max(1.);
+    let stops = (0..=last as usize).map(|i| {
+        div()
+            .absolute()
+            .top(px(-4.))
+            .left(relative(i as f32 / last))
+            .ml(px(-6.))
+            .size(px(12.))
+            .rounded_full()
+            .bg(p.group_on)
+            .border_2()
+            .border_color(p.track)
+    });
+    slider_track(state, &p)
+        .children(stops)
+        .child(thumb(state, s.value().end() / last, &p))
+        .into_slider(state)
+}
+
+/// The 4 px rail, in a 20 px tall hit area.
+fn slider_track(state: &Entity<SliderState>, p: &Palette) -> base::SliderIndicator {
+    base::SliderIndicator::new(state)
+        .relative()
+        .w_full()
+        .h(px(4.))
+        .rounded(px(2.))
+        .bg(p.track)
+}
+
+trait IntoSlider {
+    fn into_slider(self, state: &Entity<SliderState>) -> base::Slider;
+}
+
+impl IntoSlider for base::SliderIndicator {
+    fn into_slider(self, state: &Entity<SliderState>) -> base::Slider {
+        base::Slider::new(state).flex_1().min_w(px(80.)).child(
+            base::SliderTrack::new(state)
+                .flex()
+                .items_center()
+                .h(px(20.))
+                .w_full()
+                .child(self),
+        )
+    }
+}
+
+/// The 20 px thumb with a Lagoon inner dot that grows on hover, at `pct` along the rail.
+fn thumb(state: &Entity<SliderState>, pct: f32, p: &Palette) -> base::SliderThumb {
+    base::SliderThumb::new(state)
+        .group("thumb")
+        .absolute()
+        .top(px(-8.))
+        .left(relative(pct))
+        .ml(px(-10.))
+        .size(px(20.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .bg(p.thumb)
+        .border_1()
+        .border_color(p.stroke_strong)
+        .shadow(vec![BoxShadow {
+            color: hsla(0., 0., 0., 0.16),
+            offset: point(px(0.), px(1.)),
+            blur_radius: px(2.),
+            spread_radius: px(0.),
+            inset: false,
+        }])
+        .child(
+            div()
+                .size(px(12.))
+                .rounded_full()
+                .bg(p.lagoon)
+                .group_hover("thumb", |this| this.size(px(14.))),
+        )
 }

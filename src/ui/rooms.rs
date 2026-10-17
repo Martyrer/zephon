@@ -6,17 +6,16 @@
 use std::time::Duration;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::select::Select;
 use gpui_kit::component::{Disableable, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 use super::controls::{self, icon};
 use super::style::{Palette, TypeExt as _, lead_text};
-use super::{SenderView, profile_title};
+use super::{SenderView, profile_at, profile_title};
 use crate::controller::{Command, RECONNECT_ATTEMPTS, ReceiverView, Reconnect};
 use crate::firewall::FirewallState;
-use crate::session::Status;
+use crate::session::{LatencyProfile, Status};
 
 /// Fade-in of a room's controls when it is switched on (skipped with reduced motion).
 const EXPAND: Duration = Duration::from_millis(180);
@@ -346,25 +345,87 @@ fn render_room(
                     .text_color(if known { p.ink } else { p.ink_3 })
                     .child(format!("{:.0}", w.value)),
             );
-        let profile = Select::new(&w.profile)
-            .menu_width(px(260.))
-            .accessibility_label("Latency profile")
-            .bg(p.control)
-            .border_color(p.stroke);
-        let controls = div().mt(px(10.)).flex().gap_3();
-        let controls = if narrow {
-            // Narrow: the slider takes the full row and the profile select its own line.
-            controls
-                .flex_col()
-                .child(volume)
-                .child(div().w_full().child(profile))
-        } else {
-            controls
-                .flex_row()
-                .items_center()
-                .child(volume)
-                .child(div().w(fonts.px(176.)).flex_none().child(profile))
-        };
+        // Latency profile: one stop per profile, evenly spaced, the same width as the volume
+        // slider so the two line up. The labels under the stops are buttons that pick a
+        // profile too (Tab and Enter for the keyboard, a name for screen readers). Narrow, the
+        // figure goes under the name so the three labels fit.
+        let shown = profile_at(w.profile.read(cx).value().end());
+        let last = LatencyProfile::ALL.len() - 1;
+        let labels = h_flex().children(LatencyProfile::ALL.iter().enumerate().map(|(i, &lp)| {
+            let state = w.profile.clone();
+            let chosen = lp == shown;
+            let name = div()
+                .text_color(if chosen { p.ink } else { p.ink_2 })
+                .when(chosen, |this| this.font_weight(FontWeight::SEMIBOLD))
+                .child(profile_title(lp));
+            let figure = div()
+                .text_color(p.ink_2)
+                .child(format!("{} ms", lp.lag_ms()));
+            let text = div()
+                .flex()
+                .t_small(fonts)
+                .whitespace_nowrap()
+                .when(narrow, |this| {
+                    this.flex_col()
+                        .when(i > 0 && i < last, |this| this.items_center())
+                        .when(i == last, |this| this.items_end())
+                })
+                .when(!narrow, |this| this.flex_row().gap(px(4.)))
+                .child(name)
+                .child(figure);
+            div()
+                .flex_1()
+                .flex()
+                .when(i > 0 && i < last, |this| this.justify_center())
+                .when(i == last, |this| this.justify_end())
+                .child(
+                    Button::new(ElementId::Name(
+                        format!("profile-{}-{}", r.name, lp.name()).into(),
+                    ))
+                    .ghost()
+                    .compact()
+                    .xsmall()
+                    .h_auto()
+                    .py(px(2.))
+                    .px(px(4.))
+                    // Text starts and ends under the rail's ends, not the button's.
+                    .when(i == 0, |this| this.ml(px(-4.)))
+                    .when(i == last, |this| this.mr(px(-4.)))
+                    .accessibility_label(format!(
+                        "Latency profile {}, {} ms",
+                        profile_title(lp),
+                        lp.lag_ms()
+                    ))
+                    .toggled(chosen)
+                    .child(text)
+                    // Setting the value picks the profile (see `SenderView::add_row`).
+                    .on_click(move |_, window, cx| {
+                        state.update(cx, |s, cx| s.set_value(i as f32, window, cx));
+                    }),
+                )
+        }));
+        let profile = h_flex()
+            .gap(px(10.))
+            .items_start()
+            .child(div().h(px(20.)).flex().items_center().child(icon(
+                controls::CLOCK,
+                16.,
+                p.ink_2,
+            )))
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .child(controls::profile_picker(&w.profile, cx))
+                    .child(labels),
+            )
+            // The volume figure's slot, so both rails end at the same x.
+            .child(div().w(fonts.px(26.)).flex_none());
+        let controls = v_flex()
+            .mt(px(10.))
+            .gap(px(8.))
+            .child(volume)
+            .child(profile);
         let controls = controls.with_animation(
             ElementId::Name(format!("expand-{}", r.name).into()),
             Animation::new(EXPAND).with_easing(ease_out_quint()),

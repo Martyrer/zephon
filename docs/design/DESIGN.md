@@ -20,7 +20,7 @@ The UI uses the user's words, not the internal ones.
 | start / stop | **Play** / **Stop** |
 | `streaming (N packets)` | **Playing** (the packet count goes to the log) |
 | `connecting...` / `restarting with stable...` | **Connecting…** / **Switching to stable…** |
-| latency profile `low (~125 ms)` | **Low 125 ms** in the select. The menu adds the line "lag behind this PC". |
+| latency profile `low (~125 ms)` | **Low 125 ms** under a stop of the profile picker. |
 | `loss: N resends/min`, `M lost/min` | **N resends/min**, plus **M lost/min** in amber |
 | `Glitchy? Try stable (~257 ms)` | **Glitchy?** Stable adds 92 ms of lag and rides out Wi-Fi drops. **[Switch to stable]** |
 | `(offline)` | **Offline** |
@@ -150,17 +150,23 @@ I chose C. Only rooms that are on show volume, profile and loss, because those s
 │ Rooms                                                  ↻ │
 │ ╭──────────────────────────────────────────────────────╮ │  one group, Layer 1
 │ │ Kitchen  HomePod mini 192.0.2.101      Playing  (●═) │ │  room on: Layer 2
-│ │ ◁) ━━━━━━━━━━○─────────────  50   [Balanced 165 ms v]│ │
+│ │ ◁) ━━━━━━━━━━━━━━━━━━━━○────────────────────────  50 │ │
+│ │ ◷  ○─────────────────────●─────────────────────○     │ │  profile picker, same width
+│ │    Low 125 ms     Balanced 165 ms  Stable 257 ms     │ │
 │ │ 2 resends/min                                        │ │
 │ ├──────────────────────────────────────────────────────┤ │
 │ │ Upstairs Office  HomePod mini …        Playing  (●═) │ │
-│ │ ◁) ━━━━━━━━━━━━━━━━━○──────  72   [Stable 257 ms   v]│ │
+│ │ ◁) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━○─────────  72 │ │
+│ │ ◷  ○─────────────────────○─────────────────────●     │ │
+│ │    Low 125 ms     Balanced 165 ms  Stable 257 ms     │ │
 │ │ 6 resends/min                                        │ │
 │ ├──────────────────────────────────────────────────────┤ │
 │ │ Den Soundbar  Samsung HW-S60        …           (═○) │ │  room off: one line
 │ ├──────────────────────────────────────────────────────┤ │
 │ │ Basement TV   TV-55 192.0.2.14         Playing  (●═) │ │
-│ │ ◁) ━━━━━━○─────────────────  30   [Balanced 165 ms v]│ │
+│ │ ◁) ━━━━━━━━━━━━○────────────────────────────────  30 │ │
+│ │ ◷  ○─────────────────────●─────────────────────○     │ │
+│ │    Low 125 ms     Balanced 165 ms  Stable 257 ms     │ │
 │ │ 41 resends/min  3 lost/min                           │ │  amber
 │ │ ┌ Glitchy? Stable adds 92 ms …   [Switch to stable] ┐│ │  amber wash
 │ ├──────────────────────────────────────────────────────┤ │
@@ -176,7 +182,7 @@ I chose C. Only rooms that are on show volume, profile and loss, because those s
 ### Narrow (360-440 px)
 
 - The meta text wraps under the room name.
-- The volume slider takes the full row, and the profile select moves to its own line below it.
+- The volume slider and the profile picker keep their own lines and shrink with the window. The picker's labels put the figure under the name ("Balanced" over "165 ms"), so the three fit.
 
 ### Stopped
 
@@ -211,21 +217,34 @@ The only shadows are the window's (from the OS) and a 1 px shadow under the slid
 
 1. **Native first.** Windows 11 metrics (32 px controls, 40×20 switch, 20 px slider thumb with an inner dot, 46 px caption buttons) and Segoe UI Variable throughout.
 2. **Glass is the backdrop, not decoration.** The window is the only surface that is blurred. Panels are flat translucent tints over it, and no element uses a blur of its own.
-3. **Show controls only where they do something.** A room that is off has no slider or profile select. While playing, Sound from shows as plain text with "Stop to change" instead of looking like a broken select.
+3. **Show controls only where they do something.** A room that is off has no volume slider or profile picker. While playing, Sound from shows as plain text with "Stop to change" instead of looking like a broken select.
 4. **Numbers in fixed slots.** Volume, lag and loss each have a fixed position with tabular digits, so a glance compares rooms without reading labels.
 5. **Hints are offers.** The glitch hint names its cost (+92 ms) and offers one button. The app never changes the profile by itself.
 6. **Errors say what to do.** For example: "Didn't connect. No answer within 10 s. The firewall rule is likely missing."
 
 ## The sync note
 
-Rooms are not clock-synced to each other. Each plays its profile's lag behind the PC, so rooms on different profiles play the difference apart. The profile select in each row already shows the lag behind the PC. The offset between rooms is the one thing the rows do not show, so the footer shows it in one line, and only when the rooms that play are on different profiles:
+Rooms are not clock-synced to each other. Each plays its profile's lag behind the PC, so rooms on different profiles play the difference apart. The profile picker in each row already shows the lag behind the PC. The offset between rooms is the one thing the rows do not show, so the footer shows it in one line, and only when the rooms that play are on different profiles:
 
 - Two rooms: "Kitchen and Bedroom TV play 92 ms apart. Put both on Stable to line them up."
 - More rooms: "Rooms on different profiles play up to 132 ms apart. Put them all on Stable to line them up."
 
 It suggests the slowest profile in use, because that change makes no room more likely to glitch.
 
-The lag line that used to fill the footer showed the same data as a timeline. Its round dots on a rail looked like slider thumbs, so people tried to drag them, and the lag behind the PC was already in each row's select.
+The lag line that used to fill the footer showed the same data as a timeline. Its round dots on a rail looked like slider thumbs, so people tried to drag them, and the lag behind the PC was already in each row's profile select (now the picker).
+
+## The profile picker
+
+Each room that is on picks its latency profile on a line under its volume slider:
+
+- A clock icon, then the volume slider's own 4 px Track rail and 20 px thumb with the Lagoon inner dot, then an empty slot as wide as the volume figure. Both rails start and end at the same x, so the two lines read as one block.
+- One hollow 12 px stop per profile, evenly spaced: Low at the left end, Balanced in the middle, Stable at the right end. The rail has no fill, because a profile is a choice, not an amount.
+- Under the stops, "Low 125 ms", "Balanced 165 ms" and "Stable 257 ms". The first is left-aligned, the middle centred and the last right-aligned, so none runs past the rail. The chosen name is Ink and semibold, the rest Ink 2.
+- Drag the thumb, click the rail, or click a label. The thumb snaps to the nearest stop while dragging, and the label under it turns semibold.
+- The labels are ghost buttons: Tab reaches them, Enter picks, and a screen reader reads "Latency profile Stable, 257 ms" with its pressed state. They replace the select's keyboard use, since the slider itself takes no keys.
+- A profile change restarts the room's session ("Switching to stable…"), so a drag sends it once, on release, and a label on click (press and release on it), not on every move. Until the controller shows the new profile, or for 1.5 s, the thumb stays where it was put.
+
+The stops are not to scale (125 to 165 ms looks as far as 165 to 257 ms). The sync note covers the offset between rooms, so the picker only has to make the choice clear.
 
 ## Follow system
 

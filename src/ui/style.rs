@@ -7,7 +7,7 @@
 //!
 //! Every surface is a translucent tint over the window material, so no color here is an
 //! opaque panel except the select menu. gpui-kit components read the theme JSON; the app's
-//! own elements (rooms, switch, slider) read [`Palette`] directly, because some
+//! own elements (rooms, switch, sliders) read [`Palette`] directly, because some
 //! tokens have no gpui-kit field (amber/red washes) and gpui-kit clamps `list_active` to 20 %.
 //!
 //! GPUI's renderer adds alpha when it blends (D3D11 `SrcBlendAlpha = DestBlendAlpha = ONE`),

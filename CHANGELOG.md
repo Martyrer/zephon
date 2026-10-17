@@ -17,6 +17,8 @@ All notable changes to this project are listed here. The format follows
 - The lag line at the bottom of the window is gone: its dots looked draggable but weren't, and
   each room already shows its lag. When rooms on different profiles play out of step, the
   footer now says by how much and which profile lines them up.
+- Each room picks its latency profile on a 3-stop slider under its volume, in place of the
+  drop-down. Drag the thumb or click a profile's name.
 
 ### Fixed
 
