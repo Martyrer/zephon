@@ -190,6 +190,7 @@ I chose C. Only rooms that are on show volume, profile and loss, because those s
 - Rooms that are on keep their slider (start volume) and profile, but show no status.
 - The sync note counts the rooms that will play on Play.
 - The footer reads "2 rooms on", with the accent button **[▶ Play]** on the right.
+- With no room on, the footer reads "No rooms on" and **Play** is disabled, with the tooltip "Turn on at least one room to play." Switching off the last room while playing stops, so the window lands in this state.
 
 ### Firewall banner (rare)
 

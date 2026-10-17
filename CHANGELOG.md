@@ -22,6 +22,9 @@ All notable changes to this project are listed here. The format follows
 
 ### Fixed
 
+- Play is disabled while no room is on; its tooltip says to turn one on. Switching off the
+  last room while playing now stops playback instead of leaving Stop showing with nothing on.
+
 - When no room is left playing because they all failed, playback stops, so the footer shows
   Play instead of Stop. The footer no longer says "Connecting…" when nothing is connecting.
 - A slow answer from a receiver on weak Wi-Fi no longer drops the room: it now gets 10 s, not

@@ -316,6 +316,18 @@ impl Engine {
                         if let Some(h) = self.sessions.get(&name) {
                             h.stop();
                         }
+                        // With no room left on there is nothing to play: stop, as the Stop
+                        // button would, so the footer offers Play (disabled until a room is on).
+                        // A hidden room can still be on from an older settings file, but never
+                        // plays, so it does not count.
+                        let any_on = lock(&self.state)
+                            .receivers
+                            .iter()
+                            .any(|r| r.selected && !r.hidden);
+                        if !any_on {
+                            info!("No room on; stopping");
+                            self.handle(Command::Stop);
+                        }
                     }
                 }
             }
@@ -1927,6 +1939,25 @@ mod tests {
         e.on_session_event(living, SessionEvent::Status(Status::Idle));
         e.on_session_event(living, SessionEvent::Ended(SessionStats::default()));
         assert!(!lock(&e.state).streaming);
+    }
+
+    #[test]
+    fn switching_off_the_last_room_stops() {
+        let mut e = demo_engine(&["Kitchen", "Living Room", "Den"]);
+        // On in an older settings file, and hidden: it never plays, so it doesn't count.
+        lock(&e.state).receivers[2].hidden = true;
+        e.settings.was_playing = true;
+        let (kitchen, _k) = stand_in_session(&mut e, "Kitchen");
+        let (living, _l) = stand_in_session(&mut e, "Living Room");
+        e.on_session_event(kitchen, SessionEvent::Status(Status::Streaming));
+        e.on_session_event(living, SessionEvent::Status(Status::Streaming));
+        // One room still on: it keeps playing.
+        e.handle(Command::SetSelected("Kitchen".into(), false));
+        assert!(lock(&e.state).streaming);
+        e.handle(Command::SetSelected("Living Room".into(), false));
+        assert!(!lock(&e.state).streaming);
+        // As with Stop, there is nothing to resume on the next launch.
+        assert!(!e.settings.was_playing);
     }
 
     #[tokio::test(start_paused = true)]

@@ -33,7 +33,7 @@ use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::searchable_list::SearchableListItem;
 use gpui_kit::component::select::{Select, SelectEvent, SelectState};
 use gpui_kit::component::slider::{SliderEvent, SliderState};
-use gpui_kit::component::{TitleBar, h_flex, v_flex};
+use gpui_kit::component::{Disableable, TitleBar, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
@@ -560,6 +560,14 @@ impl SenderView {
             Button::new("transport")
                 .icon(icon(controls::STOP, 14., p.ink))
                 .label("Stop")
+        } else if on == 0 {
+            // Nothing to play to. The controller also stops when the last room is switched off.
+            Button::new("transport")
+                .primary()
+                .icon(icon(controls::PLAY, 14., p.ink_3))
+                .label("Play")
+                .disabled(true)
+                .tooltip("Turn on at least one room to play.")
         } else {
             Button::new("transport")
                 .primary()
