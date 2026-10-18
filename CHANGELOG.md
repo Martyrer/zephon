@@ -25,6 +25,8 @@ All notable changes to this project are listed here. The format follows
 
 ### Fixed
 
+- While a room played, the close, maximize and minimize buttons, dragging the window and a
+  double click on the title often took several tries. They now work on the first click.
 - Text and controls now meet WCAG AA contrast in both themes, whatever is behind the window:
   dim text such as IP addresses and "Offline" was too faint, and so were secondary text in
   the dark theme, the outline of a switch that is off, the slider rails and the scrollbar

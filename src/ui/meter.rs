@@ -4,8 +4,8 @@
 //! few ms of CPU, so a meter that did it 30 times a second would cost about a sixth of a core.
 //! Instead the content ([`SenderView`](super::SenderView)) is drawn as a cached view, and the
 //! meters are painted by a sibling view on top of it, [`MeterLayer`]. A meter frame
-//! re-renders that layer and the views above it (gpui-kit's root and its small overlay
-//! views), and GPUI replays the content from the last frame.
+//! re-renders that layer, the title bar and the views above them (gpui-kit's root and its
+//! small overlay views), and GPUI replays the content from the last frame.
 //!
 //! A reused cached view adds no accessibility nodes, so while an accessibility client is
 //! attached the content is drawn whole each frame. The meters still run at the full rate

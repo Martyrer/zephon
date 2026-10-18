@@ -447,27 +447,6 @@ impl SenderView {
         );
     }
 
-    fn render_title_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let p = Palette::of(cx);
-        title_bar(APP_NAME, &self.fonts, &p).child(
-            // Occlude, so clicks reach the button instead of the window-drag area.
-            h_flex()
-                .id("title-actions")
-                .occlude()
-                .mr_1()
-                .items_center()
-                .child(
-                    // Medium icon buttons are 32 px square with a 16 px icon.
-                    Button::new("settings")
-                        .ghost()
-                        .icon(icon(controls::GEAR, 16., p.ink_2))
-                        .tooltip("Settings")
-                        .accessibility_label("Settings")
-                        .on_click(|_, window, cx| settings_window::open(window, cx)),
-                ),
-        )
-    }
-
     fn render_sound_from(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = Palette::of(cx);
         let streaming = self.state.streaming;
@@ -654,7 +633,6 @@ impl Render for SenderView {
             .size_full()
             .t_body(&self.fonts)
             .text_color(p.ink)
-            .child(self.render_title_bar(cx))
             .child(
                 v_flex()
                     .id("content")
@@ -681,11 +659,22 @@ impl Render for SenderView {
     }
 }
 
-/// The main window: the content, drawn as a cached view, with the level meters painted over
-/// it by their own view, so a meter frame does not re-render the content (see `meter`).
+/// The main window: the title bar, the content drawn as a cached view, and the level meters
+/// painted over it by their own view, so a meter frame does not re-render the content (see
+/// `meter`).
+///
+/// The title bar must not be part of the cached content. Windows asks the app which part of the
+/// window is a caption button or the drag area (`WM_NCHITTEST`), and GPUI answers from the
+/// window-control areas of the last frame. They are added while painting, and a reused cached
+/// view does not carry them over (gpui-pre 0.3.9: `Window::reuse_paint` replays the scene but
+/// not `window_control_hitboxes`). With the title bar in the content, every meter
+/// frame dropped them, and the close, maximize and minimize buttons, the drag area and a
+/// double click on the title took several tries while a room played.
 struct MainWindow {
+    title: Entity<MainTitleBar>,
     content: Entity<SenderView>,
     meters: Entity<MeterLayer>,
+    _appearance: Subscription,
 }
 
 impl MainWindow {
@@ -696,12 +685,21 @@ impl MainWindow {
             cx.new(|cx| SenderView::new(live, rails, window, cx))
         };
         let meters = cx.new(|cx| MeterLayer::new(live, rails, window, cx));
-        Self { content, meters }
+        Self {
+            title: cx.new(|_| MainTitleBar::default()),
+            content,
+            meters,
+            // The title bar draws with the theme and fonts. A change redraws the content too, and
+            // so this view as its parent, but the title bar should not depend on that.
+            _appearance: cx.observe_global::<Appearance>(|_, cx| cx.notify()),
+        }
     }
 }
 
 impl Render for MainWindow {
-    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = Palette::of(cx);
+        let fonts = Fonts::of(cx);
         // A cached view that is reused adds no accessibility nodes (gpui-pre 0.3.9), so while
         // a screen reader or other client is attached, the content is drawn whole each frame.
         let content: AnyElement = if window.is_a11y_active() {
@@ -712,11 +710,49 @@ impl Render for MainWindow {
                 .cached(StyleRefinement::default().size_full())
                 .into_any_element()
         };
-        div()
+        v_flex()
             .size_full()
             .relative()
-            .child(content)
+            .t_body(&fonts)
+            .text_color(p.ink)
+            .child(self.title.clone())
+            .child(div().flex_1().min_h_0().w_full().child(content))
             .child(self.meters.clone())
+    }
+}
+
+/// The main window's title bar, drawn in every frame (see [`MainWindow`]).
+#[derive(Default)]
+struct MainTitleBar {
+    /// Frames this view rendered in, for the tests.
+    #[cfg(test)]
+    renders: usize,
+}
+
+impl Render for MainTitleBar {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(test)]
+        {
+            self.renders += 1;
+        }
+        let p = Palette::of(cx);
+        title_bar(APP_NAME, &Fonts::of(cx), &p).child(
+            // Occlude, so clicks reach the button instead of the window-drag area.
+            h_flex()
+                .id("title-actions")
+                .occlude()
+                .mr_1()
+                .items_center()
+                .child(
+                    // Medium icon buttons are 32 px square with a 16 px icon.
+                    Button::new("settings")
+                        .ghost()
+                        .icon(icon(controls::GEAR, 16., p.ink_2))
+                        .tooltip("Settings")
+                        .accessibility_label("Settings")
+                        .on_click(|_, window, cx| settings_window::open(window, cx)),
+                ),
+        )
     }
 }
 
