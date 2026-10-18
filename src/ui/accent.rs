@@ -7,24 +7,26 @@
 //! missing, the DWM `AccentColor` (ABGR) seeds both.
 //!
 //! The seed is then moved in lightness until text on it and the accent on the glass reach
-//! [`MIN_CONTRAST`] (WCAG 2), checked against the theme's root tints and room fills. The text
-//! on it is white in the light theme and a near-black of the same hue in the dark theme, as
-//! with Lagoon. Hover and pressed fills step away from the base and are checked the same way.
+//! [`MIN_CONTRAST`] (WCAG 2), checked against the footer and room fills over the darkest and
+//! the brightest backdrop each material allows (see `style`). The text on it is white in the
+//! light theme and a near-black of the same hue in the dark theme, as with Lagoon. Hover and
+//! pressed fills step away from the base and are checked the same way.
 //!
 //! A thread blocks in `RegNotifyChangeKeyValue` on the Accent key, so a new Windows accent
 //! applies live.
 
 use gpui_kit::{Hsla, Rgba, rgba};
 
-use super::style::{Accent, AccentSet, DARK, LIGHT, Tokens, over};
+use super::style::{Accent, AccentSet, DARK, LIGHT, Tokens, paint};
+use crate::settings::Backdrop;
 use crate::winreg;
 
 const ACCENT_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent";
 const DWM_KEY: &str = r"Software\Microsoft\Windows\DWM";
 
-/// Text on the accent, and the accent as text or a mark on the glass ("Playing", the lag
-/// dots). 4.5:1 is the WCAG AA level for body text, which the 12 px "Playing" is; it is above
-/// the 3:1 needed for the accent as a graphic.
+/// Text on the accent, and the accent as text or a mark on the glass ("Playing", a switch
+/// that is on, the slider fill). 4.5:1 is the WCAG AA level for body text, which the 12 px
+/// "Playing" is; it is above the 3:1 needed for the accent as a graphic.
 pub const MIN_CONTRAST: f32 = 4.5;
 
 /// The Windows accent, derived for both themes; `None` when it cannot be read.
@@ -98,17 +100,21 @@ fn derive_dark(seed: u32) -> AccentSet {
     }
 }
 
-/// The surfaces the accent sits on in one theme, flattened over a typical material: the root
-/// tint of each material, and the room fills.
-fn glass(t: &Tokens) -> [u32; 4] {
-    let flat = |c: u32| over(c, t.material);
-    let group_off = over(t.layer_1, t.root_mica);
-    [
-        t.root_solid,
-        flat(t.root_mica),
-        flat(t.root_acrylic),
-        flat(over(t.layer_2, group_off)),
-    ]
+/// The surfaces the accent sits on in one theme: Layer 1 (the footer, rooms that are off,
+/// the settings groups) and Layer 2 (rooms that are on) over each material, each over the
+/// darkest and the brightest backdrop the material allows. Painting is affine in the
+/// backdrop, so those two bound every shade between. The root tint carries only the glyph, a
+/// logo.
+fn glass(t: &Tokens) -> Vec<u32> {
+    [Backdrop::Mica, Backdrop::Acrylic, Backdrop::Solid]
+        .into_iter()
+        .flat_map(|m| {
+            let ends = t.backdrops(m);
+            [t.group_off(m), t.group_on(m)]
+                .into_iter()
+                .flat_map(move |s| [paint(&[s], *ends.start()), paint(&[s], *ends.end())])
+        })
+        .collect()
 }
 
 /// Steps the lightness of `color` in `direction` (+1 lighter, -1 darker) until `ok`, or the

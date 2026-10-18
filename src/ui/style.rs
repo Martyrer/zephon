@@ -16,7 +16,14 @@
 //! surfaces are therefore painted once each with the precomposited color ([`Palette::root`],
 //! [`Palette::group_off`], [`Palette::group_on`]); the theme `background` is transparent so
 //! gpui-kit's root does not paint under them.
+//!
+//! Contrast (DESIGN.md, "Contrast") is checked against what the material can put behind the
+//! window, not a typical color. Acrylic is GPUI's accent-policy blur with a clear tint, so it
+//! shows whatever is behind, black to white, and only the root tint bounds it; Mica is
+//! bounded by DWM's own tint ([`Tokens::mica_range`]). [`paint`] shows how a stack of tints
+//! comes out, and the tests check every color on every surface it is drawn on.
 
+use std::ops::RangeInclusive;
 use std::rc::Rc;
 
 use gpui_kit::component::{ActiveTheme, Theme, ThemeSet};
@@ -59,20 +66,28 @@ pub struct Tokens {
     pub overlay: u32,
     /// A typical Mica color, for flattening small fills painted over the root.
     pub material: u32,
+    /// The darkest and the brightest grey Mica can be behind the root tint. DWM paints Mica
+    /// as its tint (WinUI's values: `#202020` at 80 % dark, `#F3F3F3` at 50 % light) over the
+    /// blurred wallpaper with the wallpaper's luminosity replaced by the tint's, so the
+    /// wallpaper moves its hue, not its brightness: over every hue that stays as bright as
+    /// greys `#1F`-`#22` (dark) and `#F2`-`#F6` (light). The range is wider, for DWM's noise
+    /// and builds whose recipe differs.
+    pub mica_range: [u8; 2],
 }
 
 pub const LIGHT: Tokens = Tokens {
     ink: 0x1B1E25FF,
-    ink_2: 0x565C69FF,
-    ink_3: 0x868C99FF,
+    ink_2: 0x464B55FF,
+    ink_3: 0x616774FF,
     lagoon: 0x00708AFF,
     lagoon_hover: 0x00627AFF,
     lagoon_active: 0x005466FF,
     on_lagoon: 0xFFFFFFFF,
-    amber: 0x8F5300FF,
+    amber: 0x8C5200FF,
     red: 0xB4232CFF,
     root_mica: 0xEEF1F659, // 0.35: Mica is calm, so a light tint keeps its color
-    root_acrylic: 0xEEF1F6DB, // 0.86
+    // 0.90: acrylic can show a black window, and Ink 2 and red must stay readable over it.
+    root_acrylic: 0xEEF1F6E6,
     root_solid: 0xEEF1F6FF,
     layer_1: 0xFFFFFF5C,        // 0.36
     layer_2: 0xFFFFFFA8,        // 0.66
@@ -81,7 +96,7 @@ pub const LIGHT: Tokens = Tokens {
     control_active: 0xFFFFFF8C, // 0.55
     stroke: 0x161C2D16,         // 0.085
     stroke_strong: 0x161C2D2E,  // 0.18
-    track: 0x161C2D3D,          // 0.24
+    track: 0x161C2D7E,          // 0.49, for 3:1 (Windows' strong stroke is 0.45 black)
     thumb: 0xFFFFFFFF,
     amber_wash: 0x8F530016, // 0.085
     red_wash: 0xB4232C13,   // 0.075
@@ -91,20 +106,23 @@ pub const LIGHT: Tokens = Tokens {
     window_border: 0x00000024, // 0.14
     overlay: 0x00000033,       // 0.20
     material: 0xF3F3F3FF,
+    mica_range: [0xE6, 0xFF],
 };
 
 pub const DARK: Tokens = Tokens {
     ink: 0xF1F3F6FF,
-    ink_2: 0xA9AFBBFF,
-    ink_3: 0x6F7682FF,
+    ink_2: 0xD0D3DBFF,
+    ink_3: 0xB3B7BEFF,
     lagoon: 0x5CC8D6FF,
     lagoon_hover: 0x79D4E0FF,
     lagoon_active: 0x4AB4C2FF,
     on_lagoon: 0x062A31FF,
     amber: 0xF0B455FF,
-    red: 0xFF9494FF,
-    root_mica: 0x1B1E2566,    // 0.40
-    root_acrylic: 0x1B1E25E0, // 0.88
+    red: 0xFF9999FF,
+    root_mica: 0x1B1E2566, // 0.40
+    // 0.92: acrylic can show a white window, and text on rooms that are on must stay
+    // readable over it.
+    root_acrylic: 0x1B1E25EB,
     root_solid: 0x1B1E25FF,
     layer_1: 0xFFFFFF0A,        // 0.040
     layer_2: 0xFFFFFF13,        // 0.075
@@ -113,7 +131,7 @@ pub const DARK: Tokens = Tokens {
     control_active: 0xFFFFFF0B, // 0.045
     stroke: 0xFFFFFF13,         // 0.075
     stroke_strong: 0xFFFFFF26,  // 0.15
-    track: 0xFFFFFF4D,          // 0.30
+    track: 0xFFFFFF78,          // 0.47, for 3:1 (Windows' strong stroke is 0.55 white)
     thumb: 0x454B56FF,
     amber_wash: 0xF0B4551A, // 0.10
     red_wash: 0xFF949417,   // 0.09
@@ -123,6 +141,7 @@ pub const DARK: Tokens = Tokens {
     window_border: 0xFFFFFF1A, // 0.10
     overlay: 0x00000073,       // 0.45
     material: 0x202020FF,
+    mica_range: [0x18, 0x2C],
 };
 
 /// An accent for one theme: the fill, its hover and pressed fills, and the text on it.
@@ -177,6 +196,41 @@ impl Tokens {
         self.on_lagoon = accent.on;
         self
     }
+
+    /// The root tint over `material`.
+    pub const fn root(&self, material: Backdrop) -> u32 {
+        match material {
+            Backdrop::Mica => self.root_mica,
+            Backdrop::Acrylic => self.root_acrylic,
+            Backdrop::Solid => self.root_solid,
+        }
+    }
+
+    /// Layer 1 over the root, precomposited: the rooms group (rooms that are off), the
+    /// footer, the settings groups.
+    pub fn group_off(&self, material: Backdrop) -> u32 {
+        over(self.layer_1, self.root(material))
+    }
+
+    /// Layer 2 over Layer 1 over the root, precomposited: rooms that are on.
+    pub fn group_on(&self, material: Backdrop) -> u32 {
+        over(self.layer_2, self.group_off(material))
+    }
+
+    /// The control fill over the root tint, flattened over a typical material color: opaque.
+    pub fn control_on_root(&self, material: Backdrop) -> u32 {
+        over(self.control, over(self.root(material), self.material))
+    }
+
+    /// The greys `material` can put behind the window (see the module docs). Acrylic is not
+    /// bounded; the solid root tint hides the backdrop, so one grey stands for all.
+    pub fn backdrops(&self, material: Backdrop) -> RangeInclusive<u8> {
+        match material {
+            Backdrop::Mica => self.mica_range[0]..=self.mica_range[1],
+            Backdrop::Acrylic => 0..=0xFF,
+            Backdrop::Solid => 0..=0,
+        }
+    }
 }
 
 /// The app's own colors for the active theme.
@@ -211,19 +265,40 @@ fn c(hex: u32) -> Hsla {
     rgba(hex).into()
 }
 
+/// One channel of a `0xRRGGBBAA` color (shift 24 red, 16 green, 8 blue, 0 alpha), 0 to 1.
+fn channel(v: u32, shift: u32) -> f32 {
+    ((v >> shift) & 0xFF) as f32 / 255.
+}
+
 /// CSS "source over" of two `0xRRGGBBAA` colors, as a straight-alpha color.
 pub fn over(top: u32, bottom: u32) -> u32 {
-    let ch = |v: u32, shift: u32| ((v >> shift) & 0xFF) as f32 / 255.;
-    let (ta, ba) = (ch(top, 0), ch(bottom, 0));
+    let (ta, ba) = (channel(top, 0), channel(bottom, 0));
     let a = ta + ba * (1. - ta);
     if a <= 0. {
         return 0;
     }
     let mix = |shift: u32| {
-        let v = (ch(top, shift) * ta + ch(bottom, shift) * ba * (1. - ta)) / a;
+        let v = (channel(top, shift) * ta + channel(bottom, shift) * ba * (1. - ta)) / a;
         (v * 255.).round() as u32
     };
     (mix(24) << 24) | (mix(16) << 16) | (mix(8) << 8) | (a * 255.).round() as u32
+}
+
+/// The opaque color GPUI shows for `layers` (bottom first) painted over a grey `backdrop`.
+/// Each layer blends its color "source over" but adds its alpha (see the module docs), and
+/// DWM puts what is left of the window's transparency over the material.
+pub fn paint(layers: &[u32], backdrop: u8) -> u32 {
+    let (mut rgb, mut alpha) = ([0f32; 3], 0f32);
+    for &layer in layers {
+        let a = channel(layer, 0);
+        for (c, shift) in rgb.iter_mut().zip([24, 16, 8]) {
+            *c = channel(layer, shift) * a + *c * (1. - a);
+        }
+        alpha = (alpha + a).min(1.);
+    }
+    let b = f32::from(backdrop) / 255.;
+    let [r, g, bl] = rgb.map(|c| (((c + b * (1. - alpha)) * 255.).round() as u32).min(0xFF));
+    (r << 24) | (g << 16) | (bl << 8) | 0xFF
 }
 
 /// The window material in use (after fallbacks); the root tint depends on it.
@@ -239,17 +314,11 @@ impl Palette {
         let backdrop = cx
             .try_global::<Material>()
             .map_or(Backdrop::default(), |m| m.0);
-        let root = match backdrop {
-            Backdrop::Mica => t.root_mica,
-            Backdrop::Acrylic => t.root_acrylic,
-            Backdrop::Solid => t.root_solid,
-        };
-        let group_off = over(t.layer_1, root);
         Self {
-            root: c(root),
-            group_off: c(group_off),
-            group_on: c(over(t.layer_2, group_off)),
-            control_on_root: c(over(t.control, over(root, t.material))),
+            root: c(t.root(backdrop)),
+            group_off: c(t.group_off(backdrop)),
+            group_on: c(t.group_on(backdrop)),
+            control_on_root: c(t.control_on_root(backdrop)),
             ink: c(t.ink),
             ink_2: c(t.ink_2),
             ink_3: c(t.ink_3),
@@ -521,8 +590,221 @@ mod tests {
     // Not `super::*`: that would bring GPUI's `test` macro in over Rust's `#[test]`.
     use super::{
         Accent, AccentSet, DARK, DARK_THEME, Fonts, LAGOON, LIGHT, LIGHT_THEME, Tokens, over,
-        theme_set_json,
+        paint, theme_set_json,
     };
+    use crate::settings::Backdrop;
+    use crate::ui::accent::contrast;
+
+    #[test]
+    fn paint_adds_alpha_like_gpui() {
+        // One layer is plain "source over" the backdrop.
+        assert_eq!(paint(&[0xFFFFFF80], 0x00), 0x808080FF);
+        assert_eq!(paint(&[0x00000080], 0xFF), 0x7F7F7FFF);
+        // Two half-alpha layers add up to opaque, so no backdrop shows: white over black
+        // comes out darker than "source over" (0xBF) over a white backdrop would.
+        assert_eq!(paint(&[0x00000080, 0xFFFFFF80], 0xFF), 0x808080FF);
+        assert_eq!(over(0xFFFFFF80, over(0x00000080, 0xFFFFFFFF)), 0xBFBFBFFF);
+    }
+
+    /// WCAG 2.2 AA: 4.5:1 for text (all of the app's text is under the large-text size), 3:1
+    /// for the parts that show a control or its state.
+    const TEXT: f32 = 4.5;
+    const PART: f32 = 3.0;
+
+    /// The surfaces colors are drawn on in one theme over `material`, as the layers GPUI
+    /// paints, bottom first.
+    fn surfaces(t: &Tokens, material: Backdrop, dark: bool) -> Vec<(&'static str, Vec<u32>)> {
+        let (root, off, on) = (
+            t.root(material),
+            t.group_off(material),
+            t.group_on(material),
+        );
+        // gpui-kit's ghost button hovers with Layer 2, at half its alpha in dark.
+        let ghost = if dark {
+            (t.layer_2 & !0xFF) | ((t.layer_2 & 0xFF) / 2)
+        } else {
+            t.layer_2
+        };
+        vec![
+            ("root", vec![root]),
+            ("group off", vec![off]),
+            ("group on", vec![on]),
+            ("control", vec![off, t.control]),
+            ("control hover", vec![off, t.control_hover]),
+            ("control pressed", vec![off, t.control_active]),
+            ("control on root", vec![t.control_on_root(material)]),
+            ("ghost hover on root", vec![root, ghost]),
+            ("ghost pressed on root", vec![root, t.control_active]),
+            ("ghost hover on group on", vec![on, ghost]),
+            ("ghost pressed on group on", vec![on, t.control_active]),
+            ("amber wash on root", vec![root, t.amber_wash]),
+            ("amber wash on group on", vec![on, t.amber_wash]),
+            (
+                "button on amber wash on root",
+                vec![root, t.amber_wash, t.control],
+            ),
+            (
+                "button on amber wash on group on",
+                vec![on, t.amber_wash, t.control],
+            ),
+            (
+                "button hover on amber wash on root",
+                vec![root, t.amber_wash, t.control_hover],
+            ),
+            (
+                "button hover on amber wash on group on",
+                vec![on, t.amber_wash, t.control_hover],
+            ),
+            (
+                "button pressed on amber wash on root",
+                vec![root, t.amber_wash, t.control_active],
+            ),
+            (
+                "button pressed on amber wash on group on",
+                vec![on, t.amber_wash, t.control_active],
+            ),
+            // A room that is off keeps its error.
+            ("red wash on group off", vec![off, t.red_wash]),
+            ("red wash on group on", vec![on, t.red_wash]),
+            // A profile stop's own fill, painted over the room (see `INSIDE`).
+            ("profile stop", vec![on, on]),
+            ("popover", vec![t.popover]),
+            ("popover hover", vec![t.popover, t.hover]),
+            ("popover selected", vec![t.popover, t.layer_2]),
+            ("slider thumb", vec![t.thumb]),
+        ]
+    }
+
+    /// Small surfaces drawn on another, with the one around them. A color at their edge (the
+    /// ring of a profile stop) borders both, and the stop's fill adds alpha, so the ring is
+    /// not just the track on the room.
+    const INSIDE: [(&str, &str); 1] = [("profile stop", "group on")];
+
+    /// Each color, the contrast it needs and the surfaces the UI draws it on.
+    fn uses(t: &Tokens) -> Vec<(&'static str, u32, f32, Vec<&'static str>)> {
+        let walls = ["root", "group off", "group on"];
+        let popover = ["popover", "popover hover", "popover selected"];
+        let controls = [
+            "control",
+            "control hover",
+            "control pressed",
+            "control on root",
+        ];
+        let banners = [
+            "ghost hover on group on",
+            "amber wash on root",
+            "amber wash on group on",
+            "button on amber wash on root",
+            "button on amber wash on group on",
+            "button hover on amber wash on root",
+            "button hover on amber wash on group on",
+            "button pressed on amber wash on root",
+            "button pressed on amber wash on group on",
+            "red wash on group off",
+            "red wash on group on",
+        ];
+        let all = [&walls[..], &popover, &controls, &banners].concat();
+        vec![
+            // Also the focus ring.
+            ("Ink", t.ink, TEXT, all),
+            (
+                "Ink 2",
+                t.ink_2,
+                TEXT,
+                [
+                    &walls[..],
+                    &popover,
+                    &["control", "control on root"],
+                    &[
+                        "ghost hover on group on",
+                        "ghost pressed on group on",
+                        "amber wash on root",
+                    ],
+                ]
+                .concat(),
+            ),
+            // The settings and refresh icons.
+            (
+                "Ink 2 icon",
+                t.ink_2,
+                PART,
+                vec!["ghost hover on root", "ghost pressed on root"],
+            ),
+            // Never on the root tint, where Light Ink 3 over acrylic is about 4:1: the IP,
+            // "Offline", dimmed names and an unknown volume sit in rooms, menu hints in menus
+            // (a select shows its item's title).
+            ("Ink 3", t.ink_3, TEXT, [&walls[1..], &popover].concat()),
+            (
+                "Amber",
+                t.amber,
+                TEXT,
+                vec!["group off", "group on", "amber wash on group on"],
+            ),
+            // The firewall banner's warning sign.
+            ("Amber icon", t.amber, PART, vec!["amber wash on root"]),
+            (
+                "Red",
+                t.red,
+                TEXT,
+                vec!["root", "red wash on group off", "red wash on group on"],
+            ),
+            // Rails, the outline of a switch that is off, the ring of a profile stop.
+            (
+                "Track",
+                t.track,
+                PART,
+                vec!["group off", "group on", "profile stop"],
+            ),
+            // The slider thumb's inner dot (`accent` checks the accent on the glass).
+            ("Lagoon dot", t.lagoon, PART, vec!["slider thumb"]),
+        ]
+    }
+
+    #[test]
+    fn every_color_is_readable_over_any_backdrop() {
+        let mut failures = Vec::new();
+        for (theme, t, dark) in [("Light", LIGHT, false), ("Dark", DARK, true)] {
+            for material in [Backdrop::Mica, Backdrop::Acrylic, Backdrop::Solid] {
+                let surfaces = surfaces(&t, material, dark);
+                let layers_of = |name: &str| {
+                    let (_, layers) = surfaces.iter().find(|(s, _)| *s == name).unwrap();
+                    layers
+                };
+                for (name, color, min, on) in uses(&t) {
+                    for surface in on {
+                        let layers = layers_of(surface);
+                        let around = INSIDE
+                            .iter()
+                            .find(|(s, _)| *s == surface)
+                            .map(|(_, a)| layers_of(a));
+                        // The color is one more layer: text and icons are opaque, the track
+                        // is a tint that must stand out from the surface around it.
+                        let with = [&layers[..], &[color]].concat();
+                        let worst = t
+                            .backdrops(material)
+                            .map(|b| {
+                                let painted = paint(&with, b);
+                                let beside = [Some(layers), around].into_iter().flatten();
+                                let ratio = beside
+                                    .map(|l| contrast(painted, paint(l, b)))
+                                    .fold(f32::MAX, f32::min);
+                                (ratio, b)
+                            })
+                            .min_by(|a, b| a.0.total_cmp(&b.0))
+                            .unwrap();
+                        if worst.0 < min {
+                            failures.push(format!(
+                                "{theme} {name} on {surface} over {material:?} (grey {:02X}): \
+                                 {:.2}, needs {min}",
+                                worst.1, worst.0
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
 
     #[test]
     fn over_matches_css_source_over() {

@@ -22,6 +22,11 @@ All notable changes to this project are listed here. The format follows
 
 ### Fixed
 
+- Text and controls now meet WCAG AA contrast in both themes, whatever is behind the window:
+  dim text such as IP addresses and "Offline" was too faint, and so were secondary text in
+  the dark theme, the outline of a switch that is off, the slider rails and the scrollbar
+  thumbs, which are now about twice as strong. The acrylic tint is a little denser, so a white
+  or black window behind it no longer washes text out.
 - Play is disabled while no room is on; its tooltip says to turn one on. Switching off the
   last room while playing now stops playback instead of leaving Stop showing with nothing on.
 

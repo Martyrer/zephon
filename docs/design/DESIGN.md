@@ -42,11 +42,11 @@ There are two token sets, Light and Dark, and the app's follow-system wiring cho
 | Name | Light | Dark | Use |
 |---|---|---|---|
 | Ink | `#1B1E25` | `#F1F3F6` | primary text, room names, the "This PC" origin |
-| Ink 2 | `#565C69` | `#A9AFBB` | labels, meta, loss figures, captions |
-| Ink 3 | `#868C99` | `#6F7682` | IP addresses, offline names, disabled text (never body text) |
+| Ink 2 | `#464B55` | `#D0D3DB` | labels, meta, loss figures, captions |
+| Ink 3 | `#616774` | `#B3B7BE` | IP addresses, offline names, an unknown volume, menu hints (never body text) |
 | Lagoon (accent) | `#00708A` | `#5CC8D6` | Play, switch on, slider fill, "Playing" |
-| Amber | `#8F5300` | `#F0B455` | lost/min, the glitch hint, firewall warning |
-| Signal red | `#B4232C` | `#FF9494` | the "Didn't connect" error |
+| Amber | `#8C5200` | `#F0B455` | lost/min, the glitch hint, firewall warning |
+| Signal red | `#B4232C` | `#FF9999` | the "Didn't connect" error |
 
 Text on the Lagoon accent is `#FFFFFF` in Light and `#062A31` in Dark.
 
@@ -56,17 +56,31 @@ All values are RGBA. The root tint must keep text readable over any wallpaper.
 
 | Layer | Light | Dark | Role |
 |---|---|---|---|
-| Root tint (`background`) | `rgba(238,241,246,0.35)` | `rgba(27,30,37,0.40)` | over Mica, which is calm, so the wallpaper color shows. Over Acrylic (the default, which shows busy windows behind), 0.86 / 0.88. |
+| Root tint (`background`) | `rgba(238,241,246,0.35)` | `rgba(27,30,37,0.40)` | over Mica, which is calm, so the wallpaper color shows. Over Acrylic (the default, which shows busy windows behind), 0.90 / 0.92. |
 | Layer 1 (`muted`) | `rgba(255,255,255,0.36)` | `rgba(255,255,255,0.040)` | the rooms group, the footer, rooms that are off |
 | Layer 2 (`list_active`) | `rgba(255,255,255,0.66)` | `rgba(255,255,255,0.075)` | rooms that are on |
 | Control (`input` fill) | `rgba(255,255,255,0.72)` | `rgba(255,255,255,0.065)` | select, neutral button |
 | Stroke (`border`) | `rgba(22,28,45,0.085)` | `rgba(255,255,255,0.075)` | group edge, row dividers |
 | Stroke strong | `rgba(22,28,45,0.18)` | `rgba(255,255,255,0.15)` | bottom edge of controls, lag rail |
-| Track | `rgba(22,28,45,0.24)` | `rgba(255,255,255,0.30)` | slider rail, outline of a switch that is off |
+| Track | `rgba(22,28,45,0.49)` | `rgba(255,255,255,0.47)` | slider rail, outline of a switch that is off, profile stops, scrollbar thumb |
 | Amber wash | `rgba(143,83,0,0.085)` | `rgba(240,180,85,0.10)` | hint and banner fill |
 | Red wash | `rgba(180,35,44,0.075)` | `rgba(255,148,148,0.09)` | error fill |
 
-Contrast was checked over the mockup's backdrops. Lagoon on Layer 2 is about 5:1 in Light and about 9:1 in Dark. Ink 2 on the root tint is above 4.5:1 in both themes. Ink 3 is used only for secondary data whose meaning is repeated elsewhere: the IP address, or "Offline", which the dimmed name also shows.
+### Contrast
+
+Colors meet WCAG 2.2 AA: 4.5:1 for all text (none of it is large enough for 3:1), and 3:1 for the parts that show a control or its state: the outline of a switch that is off, slider rails, the profile stops, the Lagoon dot on the slider thumb, icons and the focus ring. Disabled controls are exempt, as WCAG allows.
+
+Every surface is a tint over the material, so each color is checked against the worst backdrop the material can put behind it, not a typical one:
+
+- **Acrylic** shows whatever is behind the window, from a black terminal to a white page. Only the root tint bounds it, which is why it is 0.90 / 0.92.
+- **Mica** is DWM's own tint (`#F3F3F3` at 50 % / `#202020` at 80 %) over the wallpaper with the wallpaper's luminosity replaced by the tint's, so it stays as bright as greys `#F2`-`#F6` / `#1F`-`#22`. The checks use `#E6`-`#FF` / `#18`-`#2C` as a margin.
+- **Solid** is opaque.
+
+GPUI adds alpha when it stacks tints (see `src/ui/style.rs`), so a wash or a control fill is checked as GPUI paints it. A unit test checks each color on each surface it is drawn on; the accent, Lagoon or the Windows accent, is checked the same way. The tightest cases are about 4.6:1: Ink 3 on a room that is on over a white window behind acrylic (Dark), Ink 3 on a room that is off over a black one (Light), and the washes with their amber and red text. Of the parts, the ring of a profile stop against the room around it is about 3.1:1 (Light, a black window behind acrylic).
+
+Ink 3 is never drawn on the root tint: there Light Ink 3 over a black window behind acrylic is only about 4:1. The three inks step down evenly in Dark (about 1.35:1 from Ink to Ink 2 and from Ink 2 to Ink 3), so the IP stays dimmer than the model and an offline name dimmer than both.
+
+Group edges, row dividers and control borders are decoration, not held to 3:1: a control is told apart by its text, fill and caret. The slider thumb's ring likewise; its Lagoon dot shows the value. The glyph in the title bar is a logo, which WCAG exempts, so the accent is not checked on the root tint.
 
 ### Mapping to gpui-kit theme tokens
 
@@ -308,7 +322,7 @@ The gear in the main title bar opens a second, smaller window (520 × 640, resiz
 - **Descriptions** say what the setting does in one line, and turn amber when something is off: the material fell back, the saved font is not installed, the Windows accent could not be read, the firewall rule is missing. The firewall row then offers **Fix** (the accent button) in place of **Check again**.
 - **Controls** are the main window's own: the 40 × 20 switch, the slider with the inner dot, and gpui-kit's select and button with the same tokens. No new components.
 - **Text size** (Small 0.92×, Default, Large 1.15×) scales the type scale, gpui-kit's rem (so control heights follow), the boxes sized to hold text and the narrow breakpoints. Spacing, the switch and the slider keep their Windows metrics, as in Windows' own text-size setting.
-- **Accent.** Lagoon, or the Windows accent. The Windows accent starts from Windows' own variants (Dark 1 in the light theme, Light 2 in the dark theme) and moves in lightness until text on it and the accent on the glass reach 4.5:1, checked against every root tint and the room fills. Text on it is white in Light and a near-black of its hue in Dark, as with Lagoon.
+- **Accent.** Lagoon, or the Windows accent. The Windows accent starts from Windows' own variants (Dark 1 in the light theme, Light 2 in the dark theme) and moves in lightness until text on it and the accent on the glass reach 4.5:1, checked against the footer and room fills over the darkest and brightest backdrop each window material allows. Text on it is white in Light and a near-black of its hue in Dark, as with Lagoon.
 
 ## Review against the brief and the cliché list
 
