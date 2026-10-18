@@ -41,7 +41,7 @@ underrun or rebuild, and a drift compensator per session.
 | `firewall` | Check (NetSecurity PowerShell, per protocol) and the one-UAC-prompt install, both the app's own (paths passed to PowerShell as base64, never as script text) |
 | `autostart`, `winreg` | Start with Windows (the HKCU `Run` value) and small HKCU registry helpers |
 | `controller` | UI-agnostic app state, commands and session events, resume on launch. The UI only sends `Command`s and renders `AppState` snapshots. |
-| `ui` | gpui-kit windows (main and settings). The controller's notifier wakes a GPUI foreground task through a `futures` unbounded channel; it refreshes one shared snapshot entity both windows observe. The shared look (`ui::appearance`) is a GPUI global. The main window's content is a cached view; the level meters (`ui::meter`) are a sibling view painted over it, so meter frames do not re-render the content (except while an accessibility client is attached: a reused cached view drops out of the accessibility tree). |
+| `ui` | gpui-kit windows (main and settings). The controller's notifier wakes a GPUI foreground task through a `futures` unbounded channel; it refreshes one shared snapshot entity both windows observe. The shared look (`ui::appearance`) is a GPUI global. The main window's content is a cached view; the level meters (`ui::meter`) are a sibling view painted over it, so meter frames do not re-render the content (except while an accessibility client is attached: a reused cached view drops out of the accessibility tree). The title bar is a view of its own outside the cache (see "UI responsiveness"). `ui::perf` holds the frame tests. |
 | `cli` | Argument parsing, the subcommands, console attach, GUI launch |
 | `logging` | The log file (rotated past 5 MB) and the console log |
 | `single_instance` | One GUI at a time: a named mutex, and a second launch brings the first window forward |
@@ -53,6 +53,46 @@ integration tests in a `tests/` folder could use them; `cli`, `logging`, `single
 `engine.rs` (the background task that owns the sessions) and `demo.rs` (demo mode).
 
 Each session task is independent, so one receiver failing never stops the others.
+
+## UI responsiveness
+
+Streaming comes first and the window second: the window must never slow the sound down, and
+it must feel instant. Two kinds of frame matter.
+
+- **Full frame.** Nothing is reused. GPUI draws one for each change to the shown state, and
+  for each step of a window drag: every `WM_MOVE` refreshes the whole window, and during the
+  drag GPUI draws from a 10 ms timer. A full frame that takes longer than that makes the drag
+  stutter. With eight rooms, four of them playing, it takes about 2.7 ms in a release build
+  (about 7 ms before the layout fixes below); with all eight playing, about 3.7 ms.
+- **Meter frame.** Up to 30 a second while a room plays. It draws the meter layer, the title
+  bar and gpui-kit's root, and replays the cached content: about 0.4 to 0.5 ms. While an
+  accessibility client is attached nothing is replayed (see `ui::meter`), so each meter frame
+  is a full frame.
+
+What keeps them cheap:
+
+- **The title bar is not cached.** Windows asks on each click in the title bar whether it hit
+  a caption button or the drag area (`WM_NCHITTEST`), and GPUI answers from the
+  window-control areas of the last frame. A cached view that is replayed does not carry them
+  over (gpui-pre 0.3.9: `Window::reuse_paint` does not replay `window_control_hitboxes`), so
+  a title bar inside the cached content lost its buttons on every meter frame.
+- **Columns have a definite width.** A flex column whose width comes from stretching (a plain
+  `v_flex()` in another column) is laid out again in each layout pass of its parent, so each
+  level of nesting doubles the cost of what is inside. Give columns `w_full()`. Ten nested
+  stretched columns over 100 rows took 220 ms; with `w_full()`, 2 ms.
+- **Deep leaves are placed absolutely.** Flex rows also lay out their children more than
+  once. The profile labels under each room's picker sit absolutely in a row of fixed height,
+  so they are laid out once. Each is at most a third of the row wide, so they cannot overlap.
+  With a wide font (Verdana, say) and the window just wider than the narrow layout, the chosen
+  label can need more than a third, and its figure is cut short.
+- **Repeated controls use gpui-base's primitives** (the switch, the sliders, the profile
+  labels): gpui-kit's styled controls cost several times as much to lay out.
+
+`ui::perf` runs the main and settings windows on GPUI's test platform with the real text
+system. It checks what a meter frame draws, and checks each frame's cost against a reference
+frame timed alongside it, so the limits hold on a slow or busy machine. Debug builds optimize
+the dependencies (`[profile.dev.package."*"]`), so `cargo run` and these tests come close to
+the release build.
 
 ## Reconnect
 
