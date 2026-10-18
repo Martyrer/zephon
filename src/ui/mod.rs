@@ -703,8 +703,7 @@ impl MainWindow {
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         // A cached view that is reused adds no accessibility nodes (gpui-pre 0.3.9), so while
-        // a screen reader or other client is attached, the content is drawn whole each frame
-        // and the meters slow down to match (`MeterLayer::tick`).
+        // a screen reader or other client is attached, the content is drawn whole each frame.
         let content: AnyElement = if window.is_a11y_active() {
             self.content.clone().into_any_element()
         } else {

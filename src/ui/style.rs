@@ -182,6 +182,14 @@ pub const LAGOON: Accent = Accent {
     },
 };
 
+/// The volume rail under a level meter, from the rail's start to the thumb: the accent at
+/// 25 % over the text color on it, opaque. The meter's bar is the accent itself, so the bar
+/// keeps about 4:1 against it in both themes (a dimmed accent over the grey track was about
+/// 1.3:1), and the rail still shows a tinted channel against the room and the track.
+pub fn meter_well(accent: &AccentSet) -> u32 {
+    over((accent.base & !0xFF) | 0x40, accent.on)
+}
+
 /// The accent in use (the theme JSON and [`Palette`] are built from it).
 pub struct ActiveAccent(pub Accent);
 
@@ -247,6 +255,8 @@ pub struct Palette {
     pub stroke: Hsla,
     pub stroke_strong: Hsla,
     pub track: Hsla,
+    /// See [`meter_well`].
+    pub meter_well: Hsla,
     pub thumb: Hsla,
     pub amber_wash: Hsla,
     pub red_wash: Hsla,
@@ -310,7 +320,8 @@ impl Palette {
     pub fn of(cx: &App) -> Self {
         let dark = cx.theme().is_dark();
         let accent = cx.try_global::<ActiveAccent>().map_or(LAGOON, |a| a.0);
-        let t = &(if dark { DARK } else { LIGHT }).with_accent(accent.for_theme(dark));
+        let accent = accent.for_theme(dark);
+        let t = &(if dark { DARK } else { LIGHT }).with_accent(accent);
         let backdrop = cx
             .try_global::<Material>()
             .map_or(Backdrop::default(), |m| m.0);
@@ -330,6 +341,7 @@ impl Palette {
             stroke: c(t.stroke),
             stroke_strong: c(t.stroke_strong),
             track: c(t.track),
+            meter_well: c(meter_well(accent)),
             thumb: c(t.thumb),
             amber_wash: c(t.amber_wash),
             red_wash: c(t.red_wash),

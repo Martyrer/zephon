@@ -176,7 +176,7 @@ fn min_contrast(c: u32, surfaces: &[u32]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::{DARK, LIGHT, MIN_CONTRAST, contrast, derive, glass, min_contrast};
-    use crate::ui::style::{AccentSet, LAGOON};
+    use crate::ui::style::{AccentSet, LAGOON, meter_well};
 
     fn assert_readable(set: &AccentSet, surfaces: &[u32]) {
         for (name, fill) in [
@@ -191,6 +191,10 @@ mod tests {
             let c = min_contrast(fill, surfaces);
             assert!(c >= MIN_CONTRAST, "{name} {fill:08X} on glass: {c:.2}");
         }
+        // A level meter's bar on the rail under it: 3:1, as for any part of a control.
+        let well = meter_well(set);
+        let c = contrast(set.base, well);
+        assert!(c >= 3.0, "meter bar {:08X} on {well:08X}: {c:.2}", set.base);
     }
 
     #[test]

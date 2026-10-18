@@ -7,9 +7,11 @@
 //! re-renders that layer and the views above it (gpui-kit's root and its small overlay
 //! views), and GPUI replays the content from the last frame.
 //!
-//! A reused cached view adds no accessibility nodes, so while an accessibility client (a
-//! screen reader, for one) is attached the content is drawn whole each frame, and the meters
-//! update 4 times a second, as with reduced motion, to keep that cost down.
+//! A reused cached view adds no accessibility nodes, so while an accessibility client is
+//! attached the content is drawn whole each frame. The meters still run at the full rate
+//! then: on Windows many apps attach (password managers, PowerToys, the touch keyboard host),
+//! and the attachment lasts until Zephon restarts, so this is a common case, not a rare one.
+//! It costs about 3 % of a core more than 4 frames a second did.
 //!
 //! The slider states are not views, so their changes do not redraw the cached content by
 //! themselves; `SenderView` observes each one.
@@ -296,11 +298,9 @@ impl MeterLayer {
     /// Reads the levels that play in the rooms now, and asks for a frame if a bar moved.
     /// Returns the wait before the next tick.
     ///
-    /// With reduced motion the bars jump 4 times a second. So they do while a screen reader or
-    /// other accessibility client is attached: the content is then drawn without its cache
-    /// (see `MainWindow`), so each meter frame costs a full render.
+    /// With reduced motion the bars jump 4 times a second.
     fn tick(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Duration {
-        let still = cx.reduce_motion() || window.is_a11y_active();
+        let still = cx.reduce_motion();
         let now = Instant::now();
         let scale = window.scale_factor();
         let mut moved = false;

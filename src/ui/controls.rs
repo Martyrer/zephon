@@ -73,10 +73,6 @@ pub fn group_on_glass(group: impl IntoElement, p: &Palette) -> impl IntoElement 
         .child(strip())
 }
 
-/// The volume fill under a level meter: dimmed, so the meter's Lagoon bar stands out. The
-/// thumb's Lagoon dot still shows the volume.
-const METER_FILL_OPACITY: f32 = 0.4;
-
 /// Thumb travel of the switch, for the slide animation.
 const SWITCH_SPRING: Spring = Spring::new(Duration::from_millis(160));
 
@@ -147,8 +143,10 @@ pub fn volume_slider(
                 .left_0()
                 .right(relative(1. - pct))
                 .rounded(px(2.))
+                // Under a meter the fill is a dark well the meter's bar stands out on; the
+                // thumb's dot still shows the volume.
                 .bg(if meter.is_some() {
-                    p.lagoon.opacity(METER_FILL_OPACITY)
+                    p.meter_well
                 } else {
                     p.lagoon
                 }),
