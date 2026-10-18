@@ -226,6 +226,23 @@ pub fn render_rooms(
     (header.into_any_element(), group)
 }
 
+/// How far below the top of its line box GPUI paints the baseline of `text` in `el`'s text
+/// style. Worked out as `paint_line` (gpui `text_system/line.rs`) does it: the shaped line's
+/// ascent plus descent centred in the device-pixel-snapped line height. The text itself is
+/// shaped, not a sample or the font's metrics, because on Windows the line's ascent and descent
+/// come from DirectWrite's line metrics, which grow when a CJK or emoji glyph pulls in a
+/// fallback font. Snapped to a device pixel because glyphs are (`Window::paint_glyph`); without
+/// it two baselines can still land a pixel apart.
+fn baseline(mut el: impl Styled, text: SharedString, window: &Window) -> Pixels {
+    let mut style = TextStyle::default();
+    style.refine(&el.style().text);
+    let size = style.font_size.to_pixels(window.rem_size());
+    let line = window.pixel_snap(style.line_height.to_pixels(size.into(), window.rem_size()));
+    let run = style.to_run(text.len());
+    let shaped = window.text_system().shape_line(text, size, &[run], None);
+    window.pixel_snap((line - shaped.ascent - shaped.descent) / 2. + shaped.ascent)
+}
+
 fn render_room(
     view: &SenderView,
     i: usize,
@@ -262,6 +279,15 @@ fn render_room(
         }
     };
     let dimmed = !r.online && !streaming_now;
+    // Wide, the name and the meta share a baseline. `items_baseline` cannot do it: GPUI's text
+    // leaves report no baseline to taffy, which then uses each box's bottom edge, and the
+    // 15/22 name and 12/16 meta paint their baselines at different heights in those boxes.
+    // So both hang from the top and the meta drops by the difference. The meta side is
+    // measured on the IP: it is always there and always in the UI font, and the model is too
+    // unless it holds a glyph that needs a fallback font, which no Apple model name does.
+    let ip = r.addr.ip().to_string();
+    let meta_drop = baseline(div().t_name(fonts), r.name.clone().into(), window)
+        - baseline(div().t_small(fonts), ip.clone().into(), window);
 
     let name_line = h_flex()
         .gap_3()
@@ -273,9 +299,7 @@ fn render_room(
                 .min_w_0()
                 .flex()
                 .when(narrow, |this| this.flex_col())
-                .when(!narrow, |this| {
-                    this.flex_row().items_baseline().gap(px(10.))
-                })
+                .when(!narrow, |this| this.flex_row().items_start().gap(px(10.)))
                 .child(
                     div()
                         .t_name(fonts)
@@ -288,10 +312,11 @@ fn render_room(
                         .gap(px(6.))
                         .t_small(fonts)
                         .whitespace_nowrap()
+                        .when(!narrow, |this| this.mt(meta_drop))
                         .when_some(r.model.as_deref(), |this, m| {
                             this.child(div().text_color(p.ink_2).child(model_name(m).to_string()))
                         })
-                        .child(div().text_color(p.ink_3).child(r.addr.ip().to_string())),
+                        .child(div().text_color(p.ink_3).child(ip)),
                 ),
         )
         .children(status.map(|(text, color, strong)| {
