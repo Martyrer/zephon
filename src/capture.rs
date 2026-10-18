@@ -19,7 +19,7 @@ use ::capture::{AudioChunk, AudioSource};
 use anyhow::{Context, anyhow};
 use tracing::{info, warn};
 
-use crate::level::{LevelTap, chunk_peak};
+use crate::level::{LevelTap, sent_peak};
 use crate::settings::Settings;
 
 /// Lists active render endpoints (the possible capture endpoints).
@@ -136,6 +136,8 @@ pub struct FanoutSource {
     channels: u16,
     /// Where the peak of each chunk handed to the session goes, for the room's meter.
     level: Option<Arc<LevelTap>>,
+    /// Scratch for the stereo mix of a chunk with more channels, kept from chunk to chunk.
+    mix: Vec<f32>,
 }
 
 impl FanoutSource {
@@ -172,9 +174,9 @@ impl AudioSource for FanoutSource {
             .lock()
             .ok()
             .and_then(|mut q| q.pop_front());
-        // On Nyx's feeder thread, not the capture pump: a pass over about 960 samples.
+        // On Nyx's feeder thread, not the capture pump: one pass over the chunk.
         if let (Some(tap), Some(c)) = (&self.level, &chunk) {
-            tap.record(c.timestamp, chunk_peak(&c.data));
+            tap.record(c.timestamp, sent_peak(&c.data, c.channels, &mut self.mix));
         }
         Ok(chunk.map(Arc::unwrap_or_clone))
     }
@@ -266,6 +268,7 @@ impl CaptureHub {
                 sample_rate: self.sample_rate,
                 channels: self.channels,
                 level: None,
+                mix: Vec::new(),
             },
             QueueControl(queue),
         )
@@ -492,6 +495,7 @@ mod tests {
             sample_rate: 48_000,
             channels: 2,
             level: None,
+            mix: Vec::new(),
         };
         let t0 = Instant::now();
         let chunk = |i: u32| Arc::new(AudioChunk::new(vec![0.0; 960], 48_000, 2, t0 + i * CHUNK));
@@ -520,6 +524,7 @@ mod tests {
             sample_rate: 48_000,
             channels: 2,
             level: None,
+            mix: Vec::new(),
         }
         .metered(tap.clone());
         QueueControl(queue.clone()).start_feeding();

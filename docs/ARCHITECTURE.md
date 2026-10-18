@@ -41,7 +41,7 @@ underrun or rebuild, and a drift compensator per session.
 | `firewall` | Check (NetSecurity PowerShell, per protocol) and the one-UAC-prompt install, both the app's own (paths passed to PowerShell as base64, never as script text) |
 | `autostart`, `winreg` | Start with Windows (the HKCU `Run` value) and small HKCU registry helpers |
 | `controller` | UI-agnostic app state, commands and session events, resume on launch. The UI only sends `Command`s and renders `AppState` snapshots. |
-| `ui` | gpui-kit windows (main and settings). The controller's notifier wakes a GPUI foreground task through a `futures` unbounded channel; it refreshes one shared snapshot entity both windows observe. The shared look (`ui::appearance`) is a GPUI global. The main window's content is a cached view; the level meters (`ui::meter`) are a sibling view painted over it, so meter frames do not re-render the content. |
+| `ui` | gpui-kit windows (main and settings). The controller's notifier wakes a GPUI foreground task through a `futures` unbounded channel; it refreshes one shared snapshot entity both windows observe. The shared look (`ui::appearance`) is a GPUI global. The main window's content is a cached view; the level meters (`ui::meter`) are a sibling view painted over it, so meter frames do not re-render the content (except while an accessibility client is attached: a reused cached view drops out of the accessibility tree). |
 | `cli` | Argument parsing, the subcommands, console attach, GUI launch |
 | `logging` | The log file (rotated past 5 MB) and the console log |
 | `single_instance` | One GUI at a time: a named mutex, and a second launch brings the first window forward |

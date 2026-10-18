@@ -134,7 +134,7 @@ pub fn switch(
 /// room's level meter, and the fill is dimmed so the meter's bar shows on it.
 pub fn volume_slider(
     state: &Entity<SliderState>,
-    meter: Option<(&Rails, &str)>,
+    meter: Option<(&Rails, SharedString)>,
     cx: &App,
 ) -> impl IntoElement {
     let p = Palette::of(cx);

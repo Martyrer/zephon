@@ -269,10 +269,10 @@ While a room plays, its volume rail shows the level of the sound it plays, like 
 - A 2 px Ink line at 80 % holds the loudest recent level for 1 s, then falls.
 - The scale is in dB: the left end is −40 dB, the thumb's edge full scale. The bar rises at once and falls the whole rail in 0.45 s.
 - The level is real, not an animation. It is the peak of the audio Zephon sends to the room, shown one profile lag after it was captured, when the room plays it. A packet lost on Wi-Fi still shows; a room that is silent shows no bar.
-- With reduced motion the bar moves 4 times a second, with no fall and no peak line.
+- With reduced motion the bar moves 4 times a second, with no fall and no peak line. So it does while a screen reader or another accessibility client is attached (see below).
 - Rooms that connect, switch profile or reconnect show no meter until they play.
 
-The meter must never slow the window down. The window's content is drawn once and reused; the meters are painted by a separate layer on top, so a meter frame costs about as much as a blinking caret. The meter draws at most 30 frames a second, only while a room plays and the window can be seen, and only when a bar moves by a device pixel.
+The meter must never slow the window down. The window's content is drawn once and reused; the meters are painted by a separate layer on top, so a meter frame does not draw the rooms again. The meter draws at most 30 frames a second, only while a room plays and the window is not minimized, and only when a bar it can show moves by a device pixel. GPUI cannot reuse drawn content while an accessibility client is attached (the reused part would drop out of the accessibility tree), so then the whole window is drawn for each meter frame, and the meter slows to 4 frames a second to keep that cheap.
 
 ## Follow system
 

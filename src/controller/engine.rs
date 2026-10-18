@@ -1328,8 +1328,8 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert!(tap.peak(since, Instant::now().into_std()) > 0.0);
 
-        // A restart (here a profile change) gets a new tap: the meter never shows what the
-        // old session sent.
+        // Started again (off then on, a profile change): the new session gets a new tap, and
+        // the old one stops filling, so the meter never shows what the old session sent.
         e.start_session("Kitchen");
         pump_until(&mut e, |_, id, ev| {
             id == first && matches!(ev, SessionEvent::Ended(_))
@@ -1337,7 +1337,15 @@ mod tests {
         .await;
         let new_tap = view(&e, "Kitchen").level.expect("a level tap");
         assert!(!Arc::ptr_eq(&tap, &new_tap));
-        assert_eq!(new_tap.peak(since, Instant::now().into_std()), 0.0);
+        pump_until(&mut e, |_, _, ev| {
+            *ev == SessionEvent::Status(Status::Streaming)
+        })
+        .await;
+        let since = Instant::now().into_std();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let now = Instant::now().into_std();
+        assert!(new_tap.peak(since, now) > 0.0);
+        assert_eq!(tap.peak(since, now), 0.0);
     }
 
     #[tokio::test]

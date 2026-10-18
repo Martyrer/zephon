@@ -366,7 +366,7 @@ fn render_room(
             .child(icon(controls::SPEAKER, 16., p.ink_2))
             .child(controls::volume_slider(
                 &w.slider,
-                metered.then_some((&view.rails, r.name.as_str())),
+                metered.then(|| (&view.rails, r.name.clone().into())),
                 cx,
             ))
             .child(

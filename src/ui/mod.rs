@@ -404,6 +404,12 @@ impl SenderView {
                 .step(1.0)
                 .default_value(r.volume_pct.round())
         });
+        // The slider states are not views, so a value set without a slider event (an
+        // accessibility action) would not redraw this view, which the main window caches.
+        for state in [&slider, &profile] {
+            self.subscriptions
+                .push(cx.observe(state, |_, _, cx| cx.notify()));
+        }
         let name = r.name.clone();
         self.subscriptions
             .push(cx.subscribe(&slider, move |this, _, ev: &SliderEvent, cx| {
@@ -695,15 +701,22 @@ impl MainWindow {
 }
 
 impl Render for MainWindow {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        // A cached view that is reused adds no accessibility nodes (gpui-pre 0.3.9), so while
+        // a screen reader or other client is attached, the content is drawn whole each frame
+        // and the meters slow down to match (`MeterLayer::tick`).
+        let content: AnyElement = if window.is_a11y_active() {
+            self.content.clone().into_any_element()
+        } else {
+            self.content
+                .clone()
+                .cached(StyleRefinement::default().size_full())
+                .into_any_element()
+        };
         div()
             .size_full()
             .relative()
-            .child(
-                self.content
-                    .clone()
-                    .cached(StyleRefinement::default().size_full()),
-            )
+            .child(content)
             .child(self.meters.clone())
     }
 }

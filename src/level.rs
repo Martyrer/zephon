@@ -82,9 +82,17 @@ fn in_span(t: u32, from: u32, to: u32) -> bool {
     age < to.wrapping_sub(from)
 }
 
-/// The largest absolute sample of a chunk (interleaved channels), ignoring NaN.
-pub fn chunk_peak(samples: &[f32]) -> f32 {
-    samples.iter().fold(0.0, |m, s| m.max(s.abs()))
+/// The peak of a chunk as the receiver gets it: the largest absolute sample of Nyx's stereo
+/// mix of it, ignoring NaN. Mono and stereo go out as they are; more channels are folded down
+/// as Nyx does (`pipeline::downmix_to_stereo`, which drops the LFE), in `scratch`, which keeps
+/// its allocation from chunk to chunk.
+pub fn sent_peak(samples: &[f32], channels: u16, scratch: &mut Vec<f32>) -> f32 {
+    let peak = |s: &[f32]| s.iter().fold(0.0, |m: f32, s| m.max(s.abs()));
+    if channels <= 2 {
+        return peak(samples);
+    }
+    pipeline::downmix_to_stereo(samples, channels, scratch);
+    peak(scratch)
 }
 
 #[cfg(test)]
@@ -133,8 +141,20 @@ mod tests {
     }
 
     #[test]
-    fn the_chunk_peak_is_the_largest_absolute_sample() {
-        assert_eq!(chunk_peak(&[0.2, -0.7, 0.5, f32::NAN]), 0.7);
-        assert_eq!(chunk_peak(&[]), 0.0);
+    fn the_chunk_peak_is_the_largest_absolute_sample_sent() {
+        let mut scratch = Vec::new();
+        assert_eq!(sent_peak(&[0.2, -0.7, 0.5, f32::NAN], 2, &mut scratch), 0.7);
+        assert_eq!(sent_peak(&[], 2, &mut scratch), 0.0);
+        // 5.1 (L, R, C, LFE, SL, SR): the LFE is not sent, the centre goes to both sides at
+        // -3 dB.
+        assert_eq!(
+            sent_peak(&[0.0, 0.0, 0.0, 1.0, 0.0, 0.0], 6, &mut scratch),
+            0.0
+        );
+        let centre = sent_peak(&[0.0, 0.0, 1.0, 0.0, 0.0, 0.0], 6, &mut scratch);
+        assert!(
+            (centre - std::f32::consts::FRAC_1_SQRT_2).abs() < 1e-3,
+            "{centre}"
+        );
     }
 }
