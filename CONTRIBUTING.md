@@ -39,6 +39,9 @@ Notes:
   their own rule (`cargo run -- firewall --install`).
 - `ZEPHON_DEMO=1` starts the GUI with made-up rooms and devices and a temporary settings folder.
   Use it for screenshots, so that your own room names and IP addresses stay private.
+- Debug builds optimize the dependencies (`[profile.dev.package."*"]` in `Cargo.toml`), so the
+  window in `cargo run` is close to the release build. Only Zephon's own code is unoptimized.
+  The first debug build takes a few minutes longer.
 
 ## Pull requests
 
