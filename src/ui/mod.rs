@@ -17,6 +17,8 @@ mod appearance;
 mod controls;
 mod glass;
 mod meter;
+#[cfg(test)]
+mod perf;
 mod rooms;
 mod settings_window;
 mod style;
@@ -226,6 +228,9 @@ struct SenderView {
     /// Where the volume rails are, for the level meters painted over this view.
     rails: Rails,
     subscriptions: Vec<Subscription>,
+    /// Frames this view rendered in (not replayed from the cache), for the tests.
+    #[cfg(test)]
+    renders: usize,
 }
 
 impl SenderView {
@@ -268,6 +273,8 @@ impl SenderView {
             glass: WindowGlass::new(),
             rails,
             subscriptions,
+            #[cfg(test)]
+            renders: 0,
         };
         view.glass.sync(window, cx);
         view.refresh(window, cx);
@@ -622,6 +629,10 @@ impl SenderView {
 
 impl Render for SenderView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(test)]
+        {
+            self.renders += 1;
+        }
         let p = Palette::of(cx);
         let narrow = window.viewport_size().width < NARROW_WIDTH * self.fonts.scale;
         // The rails shown now record themselves again as they are laid out.

@@ -47,6 +47,8 @@ raw-window-handle = "0.6"
 [dev-dependencies]
 # Paused time for the controller's timing tests.
 tokio = { version = "1.43", features = ["test-util"] }
+# GPUI's TestAppContext, for the UI frame tests.
+gpui-snapshot-pin = { package = "gpui-pre", version = "=0.3.9", features = ["test-support"] }
 
 [build-dependencies]
 # Embeds assets/icon.ico as the exe icon (build.rs).

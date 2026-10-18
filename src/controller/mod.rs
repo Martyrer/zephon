@@ -267,6 +267,17 @@ impl Controller {
         Self { tx, state }
     }
 
+    /// A controller with no engine behind it that shows `state`; commands go nowhere. For UI
+    /// tests, which must not start capture, discovery or the firewall check.
+    #[cfg(test)]
+    pub(crate) fn detached(state: AppState) -> Self {
+        let (tx, _) = mpsc::unbounded_channel();
+        Self {
+            tx,
+            state: Arc::new(Mutex::new(state)),
+        }
+    }
+
     pub fn send(&self, cmd: Command) {
         let _ = self.tx.send(Msg::Cmd(cmd));
     }

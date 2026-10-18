@@ -178,7 +178,7 @@ fn material_name(b: Backdrop) -> &'static str {
 
 type ChoiceSelect<T> = Entity<SelectState<Vec<Choice<T>>>>;
 
-struct SettingsView {
+pub(super) struct SettingsView {
     ctl: Arc<Controller>,
     live: Entity<Live>,
     fonts: Fonts,
@@ -202,7 +202,7 @@ struct SettingsView {
 }
 
 impl SettingsView {
-    fn new(live: Entity<Live>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub(super) fn new(live: Entity<Live>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let a = cx.global::<Appearance>();
         let (theme_now, material_now, text_size_now, accent_now) =
             (a.theme, a.backdrop, a.text_size, a.accent);

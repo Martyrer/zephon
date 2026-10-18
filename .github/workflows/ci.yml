@@ -30,6 +30,9 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Test
         run: cargo test --locked
+      # The frame tests pass on a ratio to a reference frame; print the ratios this runner gets.
+      - name: Frame times
+        run: cargo test --locked ui::perf -- --nocapture
       - name: Docs
         run: cargo doc --no-deps --locked
         env:

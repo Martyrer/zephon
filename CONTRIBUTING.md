@@ -42,6 +42,8 @@ Notes:
 - Debug builds optimize the dependencies (`[profile.dev.package."*"]` in `Cargo.toml`), so the
   window in `cargo run` is close to the release build. Only Zephon's own code is unoptimized.
   The first debug build takes a few minutes longer.
+- `cargo test --locked --release ui::perf -- --nocapture` prints how long the window takes to draw a
+  frame.
 
 ## Pull requests
 
