@@ -536,7 +536,7 @@ impl SettingsView {
             .w_full()
             .gap(px(10.))
             .items_center()
-            .child(controls::volume_slider(&self.volume, cx))
+            .child(controls::volume_slider(&self.volume, None, cx))
             .child(
                 div()
                     .w(fonts.px(26.))

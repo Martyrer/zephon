@@ -19,6 +19,7 @@ use ::capture::{AudioChunk, AudioSource};
 use anyhow::{Context, anyhow};
 use tracing::{info, warn};
 
+use crate::level::{LevelTap, chunk_peak};
 use crate::settings::Settings;
 
 /// Lists active render endpoints (the possible capture endpoints).
@@ -133,6 +134,18 @@ pub struct FanoutSource {
     queue: Arc<SessionQueue>,
     sample_rate: u32,
     channels: u16,
+    /// Where the peak of each chunk handed to the session goes, for the room's meter.
+    level: Option<Arc<LevelTap>>,
+}
+
+impl FanoutSource {
+    /// Records the peak of every chunk this source hands out into `tap`.
+    pub fn metered(self, tap: Arc<LevelTap>) -> Self {
+        Self {
+            level: Some(tap),
+            ..self
+        }
+    }
 }
 
 impl AudioSource for FanoutSource {
@@ -159,6 +172,10 @@ impl AudioSource for FanoutSource {
             .lock()
             .ok()
             .and_then(|mut q| q.pop_front());
+        // On Nyx's feeder thread, not the capture pump: a pass over about 960 samples.
+        if let (Some(tap), Some(c)) = (&self.level, &chunk) {
+            tap.record(c.timestamp, chunk_peak(&c.data));
+        }
         Ok(chunk.map(Arc::unwrap_or_clone))
     }
 
@@ -248,6 +265,7 @@ impl CaptureHub {
                 queue: queue.clone(),
                 sample_rate: self.sample_rate,
                 channels: self.channels,
+                level: None,
             },
             QueueControl(queue),
         )
@@ -473,6 +491,7 @@ mod tests {
             queue: queue.clone(),
             sample_rate: 48_000,
             channels: 2,
+            level: None,
         };
         let t0 = Instant::now();
         let chunk = |i: u32| Arc::new(AudioChunk::new(vec![0.0; 960], 48_000, 2, t0 + i * CHUNK));
@@ -490,5 +509,37 @@ mod tests {
         control.close();
         assert!(!queue.offer(&chunk(5)));
         assert_eq!(read(&mut source), None);
+    }
+
+    #[test]
+    fn a_metered_source_records_the_peak_of_each_chunk_it_hands_out() {
+        let queue = Arc::new(SessionQueue::default());
+        let tap = Arc::new(LevelTap::new());
+        let mut source = FanoutSource {
+            queue: queue.clone(),
+            sample_rate: 48_000,
+            channels: 2,
+            level: None,
+        }
+        .metered(tap.clone());
+        QueueControl(queue.clone()).start_feeding();
+        let t0 = Instant::now();
+        let chunk = |i: u32, peak: f32| {
+            Arc::new(AudioChunk::new(
+                vec![0.1, -peak, 0.0, 0.2],
+                48_000,
+                2,
+                t0 + i * CHUNK,
+            ))
+        };
+        queue.offer(&chunk(1, 0.8));
+        queue.offer(&chunk(2, 0.4));
+        // Queued but not read by the session yet: not recorded.
+        assert_eq!(tap.peak(t0, t0 + 10 * CHUNK), 0.0);
+        source.read_chunk(480).unwrap();
+        assert_eq!(tap.peak(t0, t0 + 10 * CHUNK), 0.8);
+        source.read_chunk(480).unwrap();
+        // Each at its own capture time.
+        assert_eq!(tap.peak(t0 + CHUNK, t0 + 2 * CHUNK), 0.4);
     }
 }

@@ -8,13 +8,15 @@
 //! The look follows design/DESIGN.md: a pane of glass (acrylic) with the rooms on it and the
 //! transport in a footer. `style` holds the tokens, `accent` the Windows accent, `appearance`
 //! the look both windows share, `glass` the window material, `controls` the switch/slider/
-//! icons, `rooms` the room rows and banners, `sync_note` the footer's note about rooms on
-//! different profiles, `settings_window` the settings (opened from the gear in the title bar).
+//! icons, `rooms` the room rows and banners, `meter` the level meter in the volume rails,
+//! `sync_note` the footer's note about rooms on different profiles, `settings_window` the
+//! settings (opened from the gear in the title bar).
 
 mod accent;
 mod appearance;
 mod controls;
 mod glass;
+mod meter;
 mod rooms;
 mod settings_window;
 mod style;
@@ -44,6 +46,7 @@ use crate::settings::Settings;
 
 use appearance::{Appearance, WindowGlass};
 use controls::icon;
+use meter::{MeterLayer, Rails};
 use style::{Fonts, Palette, TypeExt as _, lead_text};
 
 /// While the user drags a slider, controller snapshots do not move it (they may lag).
@@ -220,11 +223,13 @@ struct SenderView {
     rows: HashMap<String, RowWidgets>,
     fonts: Fonts,
     glass: WindowGlass,
+    /// Where the volume rails are, for the level meters painted over this view.
+    rails: Rails,
     subscriptions: Vec<Subscription>,
 }
 
 impl SenderView {
-    fn new(live: Entity<Live>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(live: Entity<Live>, rails: Rails, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let endpoint = cx.new(|cx| SelectState::new(Vec::<EndpointItem>::new(), None, window, cx));
 
         let subscriptions = vec![
@@ -261,6 +266,7 @@ impl SenderView {
             rows: HashMap::new(),
             fonts: Fonts::of(cx),
             glass: WindowGlass::new(),
+            rails,
             subscriptions,
         };
         view.glass.sync(window, cx);
@@ -631,6 +637,8 @@ impl Render for SenderView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = Palette::of(cx);
         let narrow = window.viewport_size().width < NARROW_WIDTH * self.fonts.scale;
+        // The rails shown now record themselves again as they are laid out.
+        self.rails.clear();
 
         // Every pixel's tint is painted exactly once (see `style`): the root tint on each
         // strip around the rooms group, the rows and the footer their own precomposited tint.
@@ -664,6 +672,39 @@ impl Render for SenderView {
                     .overflow_y_scrollbar(),
             )
             .child(self.render_footer(cx))
+    }
+}
+
+/// The main window: the content, drawn as a cached view, with the level meters painted over
+/// it by their own view, so a meter frame does not re-render the content (see `meter`).
+struct MainWindow {
+    content: Entity<SenderView>,
+    meters: Entity<MeterLayer>,
+}
+
+impl MainWindow {
+    fn new(live: Entity<Live>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let rails = Rails::default();
+        let content = {
+            let (live, rails) = (live.clone(), rails.clone());
+            cx.new(|cx| SenderView::new(live, rails, window, cx))
+        };
+        let meters = cx.new(|cx| MeterLayer::new(live, rails, window, cx));
+        Self { content, meters }
+    }
+}
+
+impl Render for MainWindow {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .relative()
+            .child(
+                self.content
+                    .clone()
+                    .cached(StyleRefinement::default().size_full()),
+            )
+            .child(self.meters.clone())
     }
 }
 
@@ -755,7 +796,7 @@ pub fn run() {
         let options = window_options(APP_TITLE, bounds, size(px(360.), px(420.)));
         match open_window(options, cx, move |window, cx| {
             glass::init_frame(window);
-            cx.new(|cx| SenderView::new(live, window, cx))
+            cx.new(|cx| MainWindow::new(live, window, cx))
         }) {
             Ok((main, _)) => {
                 // Closing the main window quits (closing the settings, too); closing the

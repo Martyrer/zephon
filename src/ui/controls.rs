@@ -14,6 +14,7 @@ use gpui_kit::component::{Icon, Sizable, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
+use super::meter::Rails;
 use super::style::Palette;
 
 // Icons from the mockup (design/mockup.html). GPUI draws SVGs as a mask in the text color.
@@ -72,6 +73,10 @@ pub fn group_on_glass(group: impl IntoElement, p: &Palette) -> impl IntoElement 
         .child(strip())
 }
 
+/// The volume fill under a level meter: dimmed, so the meter's Lagoon bar stands out. The
+/// thumb's Lagoon dot still shows the volume.
+const METER_FILL_OPACITY: f32 = 0.4;
+
 /// Thumb travel of the switch, for the slide animation.
 const SWITCH_SPRING: Spring = Spring::new(Duration::from_millis(160));
 
@@ -125,7 +130,13 @@ pub fn switch(
 }
 
 /// Windows 11 slider: 4 px Track rail, Lagoon fill, 20 px thumb with a Lagoon inner dot.
-pub fn volume_slider(state: &Entity<SliderState>, cx: &App) -> impl IntoElement {
+/// With a `meter` (the rails and the room's name), the rail records where it is for the
+/// room's level meter, and the fill is dimmed so the meter's bar shows on it.
+pub fn volume_slider(
+    state: &Entity<SliderState>,
+    meter: Option<(&Rails, &str)>,
+    cx: &App,
+) -> impl IntoElement {
     let p = Palette::of(cx);
     let pct = state.read(cx).percentage().end;
     slider_track(state, &p)
@@ -136,8 +147,13 @@ pub fn volume_slider(state: &Entity<SliderState>, cx: &App) -> impl IntoElement 
                 .left_0()
                 .right(relative(1. - pct))
                 .rounded(px(2.))
-                .bg(p.lagoon),
+                .bg(if meter.is_some() {
+                    p.lagoon.opacity(METER_FILL_OPACITY)
+                } else {
+                    p.lagoon
+                }),
         )
+        .children(meter.map(|(rails, name)| rails.marker(name, pct)))
         .child(thumb(state, pct, &p))
         .into_slider(state)
 }

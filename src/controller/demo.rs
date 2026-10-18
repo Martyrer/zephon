@@ -2,12 +2,14 @@
 //! show the author's devices. Nothing here touches a device or the network.
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::time::Instant;
 
 use super::{DEFAULT_VOLUME_PCT, EndpointView, ReceiverView, Reconnect};
 use crate::advice::{LOSS_WINDOW, LossStats};
+use crate::level::LevelTap;
 use crate::session::{
     self, LatencyProfile, SessionCmd, SessionEvent, SessionHandle, SessionStats, Status,
 };
@@ -15,6 +17,8 @@ use crate::session::{
 /// How long a pretend session shows "Connecting…".
 const CONNECT: Duration = Duration::from_secs(1);
 const STATS_INTERVAL: Duration = Duration::from_secs(5);
+/// One pretend capture chunk.
+const CHUNK: Duration = Duration::from_millis(10);
 
 pub(super) fn endpoints() -> Vec<EndpointView> {
     [
@@ -82,6 +86,7 @@ pub(super) fn receivers() -> Vec<ReceiverView> {
                 reconnect: Reconnect::No,
                 suggestion: None,
                 hidden: false,
+                level: None,
             }
         })
         .collect()
@@ -112,9 +117,30 @@ fn stats(name: &str, playing_for: Duration) -> SessionStats {
     }
 }
 
+/// The peak of a pretend chunk captured `t` seconds into playing: a beat at 120 BPM over a
+/// level that drifts slowly, a little different in each room (`seed`).
+fn demo_peak(t: f64, seed: u32) -> f32 {
+    let beat = (t * 2.0).fract();
+    let kick = (-beat * 7.0).exp();
+    let off_beat = (-((t * 2.0 + 0.5).fract()) * 12.0).exp() * 0.45;
+    let phrase = 0.55 + 0.3 * (t * 0.37 + f64::from(seed % 7)).sin();
+    // A little hash noise per chunk, so the bar never moves like a metronome.
+    let n = ((t * 100.0) as u32)
+        .wrapping_add(seed)
+        .wrapping_mul(2_654_435_761);
+    let noise = f64::from(n >> 24) / 255.0 * 0.15;
+    ((kick.max(off_beat) * 0.9 + noise) * phrase).min(1.0) as f32
+}
+
 /// A pretend session: "Connecting…", playing after [`CONNECT`], loss stats every few
-/// seconds, idle on Stop. Volume changes only update the state (the controller's job).
-pub(super) fn spawn_session(id: u64, name: String, events: session::EventTx) -> SessionHandle {
+/// seconds, made-up peaks into `level` every chunk while playing, idle on Stop. Volume changes
+/// only update the state (the controller's job).
+pub(super) fn spawn_session(
+    id: u64,
+    name: String,
+    level: Arc<LevelTap>,
+    events: session::EventTx,
+) -> SessionHandle {
     let (handle, mut cmds) = SessionHandle::new(id);
     tokio::spawn(async move {
         let emit = |e: SessionEvent| {
@@ -125,6 +151,11 @@ pub(super) fn spawn_session(id: u64, name: String, events: session::EventTx) -> 
         tokio::pin!(connected);
         let mut playing_since: Option<Instant> = None;
         let mut report = tokio::time::interval(STATS_INTERVAL);
+        let mut chunks = tokio::time::interval(CHUNK);
+        chunks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let seed = name
+            .bytes()
+            .fold(0u32, |h, b| h.wrapping_mul(31).wrapping_add(b.into()));
         loop {
             tokio::select! {
                 cmd = cmds.recv() => match cmd {
@@ -138,6 +169,11 @@ pub(super) fn spawn_session(id: u64, name: String, events: session::EventTx) -> 
                 _ = report.tick(), if playing_since.is_some() => {
                     let since = playing_since.unwrap_or_else(Instant::now);
                     emit(SessionEvent::Stats(stats(&name, since.elapsed().max(STATS_INTERVAL))));
+                }
+                at = chunks.tick(), if playing_since.is_some() => {
+                    let since = playing_since.unwrap_or(at);
+                    let peak = demo_peak(at.duration_since(since).as_secs_f64(), seed);
+                    level.record(at.into_std(), peak);
                 }
             }
         }

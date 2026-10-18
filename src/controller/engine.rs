@@ -14,6 +14,7 @@ use crate::advice;
 use crate::capture::{self, CaptureHub};
 use crate::discovery::{self, Receiver};
 use crate::firewall::{self, FirewallState};
+use crate::level::LevelTap;
 use crate::session::{self, SessionEvent, SessionHandle, SessionSpec, Status};
 use crate::settings::{self, Settings};
 
@@ -698,12 +699,17 @@ impl Engine {
         };
         let id = self.next_id;
         self.next_id += 1;
+        // A tap per session, so the meter never shows what an earlier session sent.
+        let level = Arc::new(LevelTap::new());
         let handle = match &self.hub {
             Some(Audio::Hub(hub)) => {
                 let (source, queue) = hub.subscribe();
+                let source = source.metered(level.clone());
                 session::spawn(id, spec, source, queue, self.ev_tx.clone())
             }
-            Some(Audio::Demo) => demo::spawn_session(id, spec.name, self.ev_tx.clone()),
+            Some(Audio::Demo) => {
+                demo::spawn_session(id, spec.name, level.clone(), self.ev_tx.clone())
+            }
             None => return,
         };
         self.sessions.insert(name.to_string(), handle);
@@ -718,6 +724,7 @@ impl Engine {
             r.suggestion = None;
             r.restarting = false;
             r.reconnect = Reconnect::No;
+            r.level = Some(level);
         }
         self.restart.remove(name);
         // A start for any other reason (Play, switch on, profile change) is a fresh one.
@@ -1111,6 +1118,7 @@ impl Engine {
                         restarting: false,
                         reconnect: Reconnect::No,
                         suggestion: None,
+                        level: None,
                     });
                 }
             }
@@ -1304,6 +1312,32 @@ mod tests {
         assert_ne!(second, first);
         assert!(e.restart.is_empty());
         assert_eq!(lock(&e.state).receivers[0].status, Status::Connecting);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn each_session_feeds_a_level_tap_of_its_own() {
+        let mut e = demo_engine(&["Kitchen"]);
+        e.start_session("Kitchen");
+        let first = session_id(&e, "Kitchen").unwrap();
+        let tap = view(&e, "Kitchen").level.expect("a level tap");
+        pump_until(&mut e, |_, _, ev| {
+            *ev == SessionEvent::Status(Status::Streaming)
+        })
+        .await;
+        let since = Instant::now().into_std();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(tap.peak(since, Instant::now().into_std()) > 0.0);
+
+        // A restart (here a profile change) gets a new tap: the meter never shows what the
+        // old session sent.
+        e.start_session("Kitchen");
+        pump_until(&mut e, |_, id, ev| {
+            id == first && matches!(ev, SessionEvent::Ended(_))
+        })
+        .await;
+        let new_tap = view(&e, "Kitchen").level.expect("a level tap");
+        assert!(!Arc::ptr_eq(&tap, &new_tap));
+        assert_eq!(new_tap.peak(since, Instant::now().into_std()), 0.0);
     }
 
     #[tokio::test]

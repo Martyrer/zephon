@@ -16,6 +16,7 @@ use tokio::sync::mpsc;
 use tokio::time::Instant;
 
 use crate::firewall::{self, FirewallState};
+use crate::level::LevelTap;
 use crate::session::{self, LatencyProfile, SessionStats, Status};
 use crate::settings::{AccentChoice, Backdrop, Settings, TextSize, ThemeChoice};
 
@@ -98,6 +99,8 @@ pub struct ReceiverView {
     pub suggestion: Option<LatencyProfile>,
     /// Hidden in the settings: left out of the Rooms list, never selected.
     pub hidden: bool,
+    /// The peak levels of the audio sent to the room's latest session, for its meter.
+    pub level: Option<Arc<LevelTap>>,
 }
 
 /// A receiver for the settings window's "Hidden rooms": every one known, found now or only
@@ -312,6 +315,7 @@ mod test_support {
             reconnect: Reconnect::No,
             suggestion: None,
             hidden: false,
+            level: None,
         }
     }
 }

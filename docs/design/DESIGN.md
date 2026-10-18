@@ -226,7 +226,7 @@ The corner radii have a hierarchy, so not everything gets the same radius:
 - controls, hint and error: 4
 - switch: fully round
 
-The only shadows are the window's (from the OS) and a 1 px shadow under the slider thumb. The rows sit in one shared group and are separated by hairlines, so there are no separate cards with their own shadows.
+The only shadows are the window's (from the OS) and a 1 px shadow under the slider thumb. The level meter is part of the slider, not a component of its own. The rows sit in one shared group and are separated by hairlines, so there are no separate cards with their own shadows.
 
 ## Principles
 
@@ -260,6 +260,19 @@ Each room that is on picks its latency profile on a line under its volume slider
 - A profile change restarts the room's session ("Switching to stable…"), so a drag sends it once, on release, and a label on click (press and release on it), not on every move. Until the controller shows the new profile, or for 1.5 s, the thumb stays where it was put.
 
 The stops are not to scale (125 to 165 ms looks as far as 165 to 257 ms). The sync note covers the offset between rooms, so the picker only has to make the choice clear.
+
+## The level meter
+
+While a room plays, its volume rail shows the level of the sound it plays, like the Windows volume mixer. It shows that the room really plays, and when a song goes quiet.
+
+- The volume fill dims to Lagoon at 40 %, and a Lagoon bar inside it shows the level. The bar starts at the left end of the rail and never passes the thumb: a room plays no louder than its volume. The thumb's Lagoon dot still shows the volume, so the dimmed fill carries no information of its own.
+- A 2 px Ink line at 80 % holds the loudest recent level for 1 s, then falls.
+- The scale is in dB: the left end is −40 dB, the thumb's edge full scale. The bar rises at once and falls the whole rail in 0.45 s.
+- The level is real, not an animation. It is the peak of the audio Zephon sends to the room, shown one profile lag after it was captured, when the room plays it. A packet lost on Wi-Fi still shows; a room that is silent shows no bar.
+- With reduced motion the bar moves 4 times a second, with no fall and no peak line.
+- Rooms that connect, switch profile or reconnect show no meter until they play.
+
+The meter must never slow the window down. The window's content is drawn once and reused; the meters are painted by a separate layer on top, so a meter frame costs about as much as a blinking caret. The meter draws at most 30 frames a second, only while a room plays and the window can be seen, and only when a bar moves by a device pixel.
 
 ## Follow system
 

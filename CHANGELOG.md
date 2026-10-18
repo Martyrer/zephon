@@ -8,6 +8,9 @@ All notable changes to this project are listed here. The format follows
 
 ### Added
 
+- Each room that plays shows the level of its sound in its volume rail, like the Windows volume
+  mixer. It is the real level of what is sent to that room, timed to when the room plays it.
+  It costs almost no CPU: the meters are drawn on their own, without redrawing the window.
 - A room that loses its connection while playing reconnects by itself: up to 3 attempts, after
   2, 4 and 8 s. The row shows "Reconnecting, attempt 1 of 3…"; after the last attempt it says
   what to check.

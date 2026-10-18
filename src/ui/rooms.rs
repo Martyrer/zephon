@@ -11,6 +11,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 use super::controls::{self, icon};
+use super::meter;
 use super::style::{Palette, TypeExt as _, lead_text};
 use super::{SenderView, profile_at, profile_title};
 use crate::controller::{Command, RECONNECT_ATTEMPTS, ReceiverView, Reconnect};
@@ -355,13 +356,19 @@ fn render_room(
     {
         // Volume: shown in Ink 3 until the receiver (or the user) has reported it.
         let known = r.volume_known || w.last_user.is_some();
+        // While the room plays, its rail carries the level meter.
+        let metered = meter::shows_meter(r);
         let volume = h_flex()
             .flex_1()
             .min_w_0()
             .gap(px(10.))
             .items_center()
             .child(icon(controls::SPEAKER, 16., p.ink_2))
-            .child(controls::volume_slider(&w.slider, cx))
+            .child(controls::volume_slider(
+                &w.slider,
+                metered.then_some((&view.rails, r.name.as_str())),
+                cx,
+            ))
             .child(
                 div()
                     .w(fonts.px(26.))

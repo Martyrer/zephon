@@ -65,6 +65,7 @@ mod tests {
             reconnect: Reconnect::No,
             suggestion: None,
             hidden: false,
+            level: None,
         }
     }
 

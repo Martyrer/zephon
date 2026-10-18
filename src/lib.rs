@@ -1,7 +1,7 @@
 //! Zephon (alpha): streams Windows system audio to AirPlay 2 receivers.
 //!
-//! The headless core is public: `settings`, `capture`, `discovery`, `session`, `firewall`,
-//! `advice` and `autostart`, with `controller` between the core and the gpui-kit window in
+//! The headless core is public: `settings`, `capture`, `level`, `discovery`, `session`,
+//! `firewall`, `advice` and `autostart`, with `controller` between the core and the gpui-kit window in
 //! the private `ui`. The executable (`src/main.rs`) only calls [`run`].
 
 pub mod advice;
@@ -10,6 +10,7 @@ pub mod capture;
 pub mod controller;
 pub mod discovery;
 pub mod firewall;
+pub mod level;
 pub mod session;
 pub mod settings;
 

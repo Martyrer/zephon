@@ -34,13 +34,14 @@ underrun or rebuild, and a drift compensator per session.
 |---|---|
 | `settings` | JSON settings and the `%APPDATA%\Zephon` paths |
 | `capture` | Capture endpoint list and choice. `CaptureHub` reads one WASAPI loopback source and fans it out into one `AudioSource` queue per session. |
+| `level` | `LevelTap`: a lock-free ring of each session's chunk peaks by capture time, recorded on Nyx's feeder thread and read by the window's level meters |
 | `discovery` | mDNS browse on the LAN interfaces only, lookup by name or IP, `GET /info` volume read |
 | `advice` | `LossStats` and `suggest_profile` (the "Glitchy?" profile hint) |
 | `session` | One `Ap2Session` per receiver, and the latency profiles |
 | `firewall` | Check (NetSecurity PowerShell, per protocol) and the one-UAC-prompt install, both the app's own (paths passed to PowerShell as base64, never as script text) |
 | `autostart`, `winreg` | Start with Windows (the HKCU `Run` value) and small HKCU registry helpers |
 | `controller` | UI-agnostic app state, commands and session events, resume on launch. The UI only sends `Command`s and renders `AppState` snapshots. |
-| `ui` | gpui-kit windows (main and settings). The controller's notifier wakes a GPUI foreground task through a `futures` unbounded channel; it refreshes one shared snapshot entity both windows observe. The shared look (`ui::appearance`) is a GPUI global. |
+| `ui` | gpui-kit windows (main and settings). The controller's notifier wakes a GPUI foreground task through a `futures` unbounded channel; it refreshes one shared snapshot entity both windows observe. The shared look (`ui::appearance`) is a GPUI global. The main window's content is a cached view; the level meters (`ui::meter`) are a sibling view painted over it, so meter frames do not re-render the content. |
 | `cli` | Argument parsing, the subcommands, console attach, GUI launch |
 | `logging` | The log file (rotated past 5 MB) and the console log |
 | `single_instance` | One GUI at a time: a named mutex, and a second launch brings the first window forward |
