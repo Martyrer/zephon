@@ -806,7 +806,8 @@ impl RenderOnce for RowContent {
 fn group(rows: Vec<Div>, p: &Palette) -> impl IntoElement {
     let last = rows.len().saturating_sub(1);
     let rows = rows.into_iter().enumerate().map(|(i, r)| {
-        r.px(px(14.))
+        r.w_full()
+            .px(px(14.))
             .py(px(12.))
             .bg(p.group_off)
             .when(i > 0, |this| this.border_t_1().border_color(p.stroke))
@@ -817,7 +818,7 @@ fn group(rows: Vec<Div>, p: &Palette) -> impl IntoElement {
         .rounded(px(8.))
         .border_1()
         .border_color(p.stroke)
-        .child(v_flex().children(rows))
+        .child(v_flex().w_full().children(rows))
 }
 
 impl Render for SettingsView {
@@ -875,6 +876,7 @@ impl Render for SettingsView {
             .child(
                 v_flex()
                     .id("settings-content")
+                    .w_full()
                     .flex_1()
                     .min_h_0()
                     .child(header("Appearance", true))

@@ -490,6 +490,7 @@ impl SenderView {
                 .into_any_element()
         };
         v_flex()
+            .w_full()
             .child(
                 h_flex()
                     .justify_between()
@@ -567,6 +568,7 @@ impl SenderView {
         };
 
         v_flex()
+            .w_full()
             .flex_none()
             .bg(p.group_off)
             .border_t_1()
@@ -636,6 +638,7 @@ impl Render for SenderView {
             .child(
                 v_flex()
                     .id("content")
+                    .w_full()
                     .flex_1()
                     .min_h_0()
                     .child(

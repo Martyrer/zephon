@@ -27,6 +27,9 @@ All notable changes to this project are listed here. The format follows
 
 - While a room played, the close, maximize and minimize buttons, dragging the window and a
   double click on the title often took several tries. They now work on the first click.
+- Dragging the window no longer stutters once the rooms are listed: the window redraws itself
+  about 2.5 times faster (about 2.7 ms with eight rooms, four of them playing, down from about
+  7 ms).
 - Text and controls now meet WCAG AA contrast in both themes, whatever is behind the window:
   dim text such as IP addresses and "Offline" was too faint, and so were secondary text in
   the dark theme, the outline of a switch that is off, the slider rails and the scrollbar

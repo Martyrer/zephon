@@ -5,8 +5,11 @@
 
 use std::time::Duration;
 
+use gpui_kit::base;
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable, h_flex, v_flex};
+use gpui_kit::component::{
+    ActiveTheme as _, Disableable, Sizable, ThemeStyled as _, h_flex, v_flex,
+};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
@@ -215,7 +218,7 @@ pub fn render_rooms(
             .enumerate()
             .map(|(i, r)| render_room(view, i, i == last, r, narrow, window, cx))
             .collect();
-        v_flex().children(rows).into_any_element()
+        v_flex().w_full().children(rows).into_any_element()
     };
 
     let group = div()
@@ -242,6 +245,45 @@ fn baseline(mut el: impl Styled, text: SharedString, window: &Window) -> Pixels 
     let run = style.to_run(text.len());
     let shaped = window.text_system().shape_line(text, size, &[run], None);
     window.pixel_snap((line - shaped.ascent - shaped.descent) / 2. + shaped.ascent)
+}
+
+/// A label under the profile picker that picks its profile: a ghost button, xsmall and compact,
+/// as gpui-kit draws one. Built on gpui-base's unstyled button, which owns focus, Enter and
+/// Space, and the accessibility node: gpui-kit's styled button costs several times as much to
+/// lay out, and a room that is on shows three of these.
+fn profile_label(id: ElementId, chosen: bool, window: &mut Window, cx: &mut App) -> base::Button {
+    let focus = window
+        .use_keyed_state(id.clone(), cx, |_, cx| cx.focus_handle())
+        .read(cx)
+        .clone();
+    let focused = focus.is_focused(window);
+    let theme = cx.theme();
+    let hover = if theme.mode.is_dark() {
+        theme.accent.opacity(0.5)
+    } else {
+        theme.accent
+    };
+    let active = theme.button_active;
+    base::Button::new(id)
+        .track_focus(&focus)
+        .aria_toggled(if chosen {
+            accesskit::Toggled::True
+        } else {
+            accesskit::Toggled::False
+        })
+        .flex_shrink_0()
+        // The labels are placed over each other (see `render_room`); a third of the row each
+        // keeps them apart whatever the font and text size.
+        .max_w(relative(1. / 3.))
+        .py(px(2.))
+        .px(px(4.))
+        .rounded(theme.radius)
+        .line_height(relative(1.25))
+        .hover(|this| this.bg(hover))
+        .active(|this| this.bg(active))
+        // A click must not move the focus ring onto the label, as gpui-kit's buttons do not.
+        .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+        .when(focused, |this| this.focus_ring_style(window, cx))
 }
 
 fn render_room(
@@ -343,6 +385,7 @@ fn render_room(
         });
 
     let mut row = v_flex()
+        .w_full()
         .px(px(14.))
         .py(px(12.))
         .when(i > 0, |this| this.border_t_1().border_color(p.stroke))
@@ -383,59 +426,71 @@ fn render_room(
         // figure goes under the name so the three labels fit.
         let shown = profile_at(w.profile.read(cx).value().end());
         let last = LatencyProfile::ALL.len() - 1;
-        let labels = h_flex().children(LatencyProfile::ALL.iter().enumerate().map(|(i, &lp)| {
-            let state = w.profile.clone();
-            let chosen = lp == shown;
-            let name = div()
-                .text_color(if chosen { p.ink } else { p.ink_2 })
-                .when(chosen, |this| this.font_weight(FontWeight::SEMIBOLD))
-                .child(profile_title(lp));
-            let figure = div()
-                .text_color(p.ink_2)
-                .child(format!("{} ms", lp.lag_ms()));
-            let text = div()
-                .flex()
-                .t_small(fonts)
-                .whitespace_nowrap()
-                .when(narrow, |this| {
-                    this.flex_col()
-                        .when(i > 0 && i < last, |this| this.items_center())
-                        .when(i == last, |this| this.items_end())
-                })
-                .when(!narrow, |this| this.flex_row().gap(px(4.)))
-                .child(name)
-                .child(figure);
-            div()
-                .flex_1()
-                .flex()
-                .when(i > 0 && i < last, |this| this.justify_center())
-                .when(i == last, |this| this.justify_end())
-                .child(
-                    Button::new(ElementId::Name(
-                        format!("profile-{}-{}", r.name, lp.name()).into(),
-                    ))
-                    .ghost()
-                    .compact()
-                    .xsmall()
-                    .h_auto()
-                    .py(px(2.))
-                    .px(px(4.))
-                    // Text starts and ends under the rail's ends, not the button's.
-                    .when(i == 0, |this| this.ml(px(-4.)))
-                    .when(i == last, |this| this.mr(px(-4.)))
-                    .accessibility_label(format!(
-                        "Latency profile {}, {} ms",
-                        profile_title(lp),
-                        lp.lag_ms()
-                    ))
-                    .toggled(chosen)
-                    .child(text)
-                    // Setting the value picks the profile (see `SenderView::add_row`).
-                    .on_click(move |_, window, cx| {
-                        state.update(cx, |s, cx| s.set_value(i as f32, window, cx));
-                    }),
-                )
-        }));
+        // The labels sit in a row of fixed height, each placed over the whole row and pushed
+        // to its end. Placed absolutely, they are laid out once, after the row; as flex items
+        // they were laid out again in every layout pass of the rows around them, which made
+        // them most of the cost of a full frame (see `ui::perf`).
+        let lines = if narrow { 2. } else { 1. };
+        let labels = div()
+            .relative()
+            .w_full()
+            .h(fonts.px(16. * lines) + px(4.))
+            .children(LatencyProfile::ALL.iter().enumerate().map(|(i, &lp)| {
+                let state = w.profile.clone();
+                let chosen = lp == shown;
+                let name = div()
+                    .text_color(if chosen { p.ink } else { p.ink_2 })
+                    .when(chosen, |this| this.font_weight(FontWeight::SEMIBOLD))
+                    .child(profile_title(lp));
+                let figure = div()
+                    .min_w_0()
+                    .truncate()
+                    .text_color(p.ink_2)
+                    .child(format!("{} ms", lp.lag_ms()));
+                let text = div()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .flex()
+                    .t_small(fonts)
+                    .whitespace_nowrap()
+                    .when(narrow, |this| {
+                        this.flex_col()
+                            .when(i > 0 && i < last, |this| this.items_center())
+                            .when(i == last, |this| this.items_end())
+                    })
+                    .when(!narrow, |this| this.flex_row().gap(px(4.)))
+                    .child(name)
+                    .child(figure);
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .flex()
+                    .when(i > 0 && i < last, |this| this.justify_center())
+                    .when(i == last, |this| this.justify_end())
+                    .child(
+                        profile_label(
+                            ElementId::Name(format!("profile-{}-{}", r.name, lp.name()).into()),
+                            chosen,
+                            window,
+                            cx,
+                        )
+                        // Text starts and ends under the rail's ends, not the button's.
+                        .when(i == 0, |this| this.ml(px(-4.)))
+                        .when(i == last, |this| this.mr(px(-4.)))
+                        .accessibility_label(format!(
+                            "Latency profile {}, {} ms",
+                            profile_title(lp),
+                            lp.lag_ms()
+                        ))
+                        .child(text)
+                        // Setting the value picks the profile (see `SenderView::add_row`).
+                        .on_click(move |_, window, cx| {
+                            state.update(cx, |s, cx| s.set_value(i as f32, window, cx));
+                        }),
+                    )
+            }));
         let profile = h_flex()
             .gap(px(10.))
             .items_start()
@@ -446,6 +501,7 @@ fn render_room(
             )))
             .child(
                 v_flex()
+                    .w_full()
                     .flex_1()
                     .min_w_0()
                     .child(controls::profile_picker(&w.profile, cx))
@@ -454,6 +510,7 @@ fn render_room(
             // The volume figure's slot, so both rails end at the same x.
             .child(div().w(fonts.px(26.)).flex_none());
         let controls = v_flex()
+            .w_full()
             .mt(px(10.))
             .gap(px(8.))
             .child(volume)
