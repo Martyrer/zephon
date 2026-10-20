@@ -90,7 +90,9 @@ What keeps them cheap:
 
 `ui::perf` runs the main and settings windows on GPUI's test platform with the real text
 system. It checks what a meter frame draws, and checks each frame's cost against a reference
-frame timed alongside it, so the limits hold on a slow or busy machine. Debug builds optimize
+frame timed alongside it, so the limits hold on a slow or busy machine. In a release build it
+also checks the times against hard limits: 10 ms for a full frame, 1 ms for a meter frame. CI
+runs it in a release build. Debug builds optimize
 the dependencies (`[profile.dev.package."*"]`), so `cargo run` and these tests come close to
 the release build.
 

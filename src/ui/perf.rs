@@ -10,9 +10,12 @@
 //! in turn, and the median of the per-pair ratios is compared with a limit. Other work on the
 //! machine then slows both sides of a pair alike, so a slow or busy machine does not fail the
 //! test, but a layout that grows several times more costly does. The timing tests run one at
-//! a time (see [`TIMING`]). The times themselves are printed, not asserted: run
-//! `cargo test --locked --release ui::perf -- --nocapture` to check them against the targets in
-//! AGENTS.md.
+//! a time (see [`TIMING`]).
+//!
+//! A release build also checks the median times against the hard limits in AGENTS.md
+//! ([`FULL_FRAME_LIMIT`], [`METER_FRAME_LIMIT`]); CI runs these tests in a release build. A
+//! debug build skips that check, as the limits hold for a release build only. Run
+//! `cargo test --locked --release ui::perf -- --nocapture` to see the times.
 //!
 //! The frames that matter (docs/ARCHITECTURE.md, "UI responsiveness"):
 //! - a full frame: GPUI draws one, with nothing reused, on each step of a window drag (every
@@ -47,6 +50,13 @@ const SETTINGS_FRAME_RATIO: f64 = 2.75;
 /// A meter frame against a full frame of the same window: about 0.12 when this was set, and
 /// about 1 if the content is drawn again for a meter.
 const METER_FRAME_RATIO: f64 = 0.25;
+
+/// The hard limit on a full frame of either window in a release build: GPUI draws a window drag
+/// from a 10 ms timer, so a slower frame makes the drag stutter. The main window took about
+/// 4.3 ms when this was set.
+const FULL_FRAME_LIMIT: Duration = Duration::from_millis(10);
+/// The hard limit on a meter frame in a release build: about 0.6 ms when this was set.
+const METER_FRAME_LIMIT: Duration = Duration::from_millis(1);
 
 /// Frames drawn before timing, so caches (text, images, keyed state) are warm.
 const WARM_UP: usize = 5;
@@ -245,6 +255,18 @@ fn timing() -> MutexGuard<'static, ()> {
     TIMING.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// Checks the median `time` of `what` against its hard `limit`, in a release build only: a
+/// debug build is slower, and the limits are set for what users run.
+fn assert_within_limit(what: &str, time: Duration, limit: Duration) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    assert!(
+        time <= limit,
+        "{what} took {time:?}, over the hard limit of {limit:?}"
+    );
+}
+
 /// Windows asks the app on every click in the title bar whether it hit a caption button or
 /// the drag area, and GPUI answers from the last frame. A part of the window replayed from
 /// the cache carries no such areas (gpui-pre 0.3.9), so the title bar must render in every
@@ -273,6 +295,7 @@ fn a_full_frame_stays_within_budget() {
         ratio <= FULL_FRAME_RATIO,
         "a full frame took {ratio:.2} x the reference frame, over {FULL_FRAME_RATIO}"
     );
+    assert_within_limit("a full frame", full, FULL_FRAME_LIMIT);
 }
 
 #[test]
@@ -285,6 +308,7 @@ fn a_meter_frame_costs_a_fraction_of_a_full_frame() {
         ratio <= METER_FRAME_RATIO,
         "a meter frame took {ratio:.2} x a full frame, over {METER_FRAME_RATIO}"
     );
+    assert_within_limit("a meter frame", meter, METER_FRAME_LIMIT);
 }
 
 #[test]
@@ -298,4 +322,5 @@ fn a_full_frame_of_the_settings_stays_within_budget() {
         ratio <= SETTINGS_FRAME_RATIO,
         "a settings frame took {ratio:.2} x the reference frame, over {SETTINGS_FRAME_RATIO}"
     );
+    assert_within_limit("a settings frame", full, FULL_FRAME_LIMIT);
 }

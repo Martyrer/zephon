@@ -30,15 +30,16 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Test
         run: cargo test --locked
-      # The frame tests pass on a ratio to a reference frame; print the ratios this runner gets.
-      - name: Frame times
-        run: cargo test --locked ui::perf -- --nocapture
       - name: Docs
         run: cargo doc --no-deps --locked
         env:
           RUSTDOCFLAGS: -D warnings
       - name: Build release
         run: cargo build --locked --release
+      # A release build checks the frame times against the hard limits in AGENTS.md, and prints
+      # them. It comes after the release build to reuse its dependencies.
+      - name: Frame times
+        run: cargo test --locked --release ui::perf -- --nocapture
 
   # The oldest Rust that builds the committed Cargo.lock; keep in step with rust-version in
   # Cargo.toml.

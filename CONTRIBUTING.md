@@ -20,13 +20,13 @@ For security problems, follow [SECURITY.md](SECURITY.md) instead.
 You need Windows, Rust stable (MSVC toolchain) and the Visual Studio C++ build tools.
 
 ```
-cargo build
-cargo test
-cargo clippy --all-targets -- -D warnings
-cargo fmt --check
+cargo build --locked
+cargo test --locked
 ```
 
-CI runs the same commands on every pull request.
+CI runs more checks on every pull request: format, clippy, docs, a release build, the frame
+tests in a release build, and a build with the oldest supported Rust. Run the steps in
+`.github/workflows/ci.yml` before you open a pull request.
 
 Notes:
 
@@ -43,7 +43,7 @@ Notes:
   window in `cargo run` is close to the release build. Only Zephon's own code is unoptimized.
   The first debug build takes a few minutes longer.
 - `cargo test --locked --release ui::perf -- --nocapture` prints how long the window takes to draw a
-  frame.
+  frame, and fails when a frame is over its hard limit (10 ms full, 1 ms meter).
 
 ## Pull requests
 
