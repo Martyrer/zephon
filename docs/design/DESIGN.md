@@ -61,7 +61,7 @@ All values are RGBA. The root tint must keep text readable over any wallpaper.
 | Layer 2 (`list_active`) | `rgba(255,255,255,0.66)` | `rgba(255,255,255,0.075)` | rooms that are on |
 | Control (`input` fill) | `rgba(255,255,255,0.72)` | `rgba(255,255,255,0.065)` | select, neutral button |
 | Stroke (`border`) | `rgba(22,28,45,0.085)` | `rgba(255,255,255,0.075)` | group edge, row dividers |
-| Stroke strong | `rgba(22,28,45,0.18)` | `rgba(255,255,255,0.15)` | bottom edge of controls, lag rail |
+| Stroke strong | `rgba(22,28,45,0.18)` | `rgba(255,255,255,0.15)` | bottom edge of controls, slider thumb ring |
 | Track | `rgba(22,28,45,0.49)` | `rgba(255,255,255,0.47)` | slider rail, outline of a switch that is off, profile stops, scrollbar thumb |
 | Amber wash | `rgba(143,83,0,0.085)` | `rgba(240,180,85,0.10)` | hint and banner fill |
 | Red wash | `rgba(180,35,44,0.075)` | `rgba(255,148,148,0.09)` | error fill |
@@ -96,7 +96,7 @@ Group edges, row dividers and control borders are decoration, not held to 3:1: a
 | `accent` (hover fill in gpui-kit, not the brand color) | Layer 2 |
 | `primary` / `primary_hover` / `primary_active` | Lagoon / Light `#00627A`, Dark `#79D4E0` / Light `#005466`, Dark `#4AB4C2` |
 | `primary_foreground` | Light `#FFFFFF`, Dark `#062A31` |
-| `list` / `list_hover` / `list_active` | Layer 1 / Layer 1 + 4 % ink / Layer 2 |
+| `list` / `list_hover` / `list_active` | Layer 1 / ink at about 6 % / Layer 2 |
 | `slider_bar` | Lagoon |
 | `slider_thumb` | Light `#FFFFFF`, Dark `#454B56` (the Lagoon inner dot is drawn on it) |
 | `switch` (off track) | transparent, with a Track-colored outline |
@@ -151,7 +151,7 @@ A  Table (the alpha)                 B  Mixer strips                    C  Room 
                                                                          └─────────────────────────────┘
 ```
 
-I chose C. Only rooms that are on show volume, profile and loss, because those settings do nothing for a room that is off. Rooms that are off collapse to a single line. The rows stay in a fixed order (the order they were discovered in) and expand in place, so turning a room on never moves the row under the cursor.
+I chose C. Only rooms that are on show volume, profile and loss, because those settings do nothing for a room that is off. Rooms that are off collapse to a single line. The rows are sorted by name and expand in place, so turning a room on never moves the row under the cursor. A newly found room can still shift the rows below it.
 
 ### Main window, playing (560 px)
 
@@ -341,7 +341,7 @@ The gear in the main title bar opens a second, smaller window (520 × 640, resiz
 
 **Brief check.**
 - *Simple, minimal:* the window has one list, one select and one button, and rooms that are off take a single line.
-- *Glassy:* the title bar and every surface are tints over Mica, with no opaque panels.
+- *Glassy:* the title bar and every surface are tints over the window material (Acrylic by default), with no opaque panels.
 - *Modern:* Windows 11 control metrics.
 - *Dark and light, following system:* two token sets plus the Theme setting.
 - *Real states:* the window holds all of them: playing, off, offline, loss, lost, the hint, the error, both firewall banners, stopped, and locked Sound from.

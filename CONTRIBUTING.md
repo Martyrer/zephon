@@ -25,7 +25,7 @@ cargo test --locked
 ```
 
 CI runs more checks on every pull request: format, clippy, docs, a release build, the frame
-tests in a release build, and a build with the oldest supported Rust. Run the steps in
+tests in a release build, and `cargo check` with the oldest supported Rust. Run the steps in
 `.github/workflows/ci.yml` before you open a pull request.
 
 Notes:
@@ -33,8 +33,8 @@ Notes:
 - `Cargo.lock` is committed. Build with `--locked`, and update it only on purpose.
 - The Nyx-Refrain crates are pinned to one commit. Before bumping `rev`, read the upstream diff
   (especially `raop/src/ap2/session.rs`) and test playback and latency by ear.
-- gpui-kit is pinned to an exact version because it ships breaking changes often. Upgrade it in
-  its own pull request.
+- gpui-kit and gpui-pre are pinned to exact versions because they ship breaking changes often.
+  Upgrade them together, in their own pull request.
 - The exe's firewall rule is tied to its path, so `target\debug` and `target\release` each need
   their own rule (`cargo run -- firewall --install`).
 - `ZEPHON_DEMO=1` starts the GUI with made-up rooms and devices and a temporary settings folder.

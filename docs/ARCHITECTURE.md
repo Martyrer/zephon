@@ -36,12 +36,12 @@ underrun or rebuild, and a drift compensator per session.
 | `capture` | Capture endpoint list and choice. `CaptureHub` reads one WASAPI loopback source and fans it out into one `AudioSource` queue per session. |
 | `level` | `LevelTap`: a lock-free ring of each session's chunk peaks by capture time, recorded on Nyx's feeder thread and read by the window's level meters |
 | `discovery` | mDNS browse on the LAN interfaces only, lookup by name or IP, `GET /info` volume read |
-| `advice` | `LossStats` and `suggest_profile` (the "Glitchy?" profile hint) |
+| `advice` | `LossStats` and `suggest_profile` (the "Glitchy?" profile hint; a stub that suggests nothing until its thresholds are decided) |
 | `session` | One `Ap2Session` per receiver, and the latency profiles |
 | `firewall` | Check (NetSecurity PowerShell, per protocol) and the one-UAC-prompt install, both the app's own (paths passed to PowerShell as base64, never as script text) |
 | `autostart`, `winreg` | Start with Windows (the HKCU `Run` value) and small HKCU registry helpers |
 | `controller` | UI-agnostic app state, commands and session events, resume on launch. The UI only sends `Command`s and renders `AppState` snapshots. |
-| `ui` | gpui-kit windows (main and settings). The controller's notifier wakes a GPUI foreground task through a `futures` unbounded channel; it refreshes one shared snapshot entity both windows observe. The shared look (`ui::appearance`) is a GPUI global. The main window's content is a cached view; the level meters (`ui::meter`) are a sibling view painted over it, so meter frames do not re-render the content (except while an accessibility client is attached: a reused cached view drops out of the accessibility tree). The title bar is a view of its own outside the cache (see "UI responsiveness"). `ui::perf` holds the frame tests. |
+| `ui` | gpui-kit windows (main and settings). The controller's notifier wakes a GPUI foreground task through a `futures` unbounded channel; it refreshes one shared snapshot entity both windows observe. The shared look (`ui::appearance`) is a GPUI global. The main window's content is a cached view; the level meters (`ui::meter`) are a sibling view painted over it, so meter frames do not re-render the content (except while an accessibility client is attached: a reused cached view drops out of the accessibility tree). The title bar is a view of its own outside the cache (see "UI responsiveness"). `ui::perf` holds the frame tests. The other submodules: `style` (the design tokens), `accent` (the Windows accent), `glass` (the window material), `controls` (switch, sliders, icons), `rooms` (room rows and banners), `sync_note` (the footer note about rooms on different profiles), `settings_window`. |
 | `cli` | Argument parsing, the subcommands, console attach, GUI launch |
 | `logging` | The log file (rotated past 5 MB) and the console log |
 | `single_instance` | One GUI at a time: a named mutex, and a second launch brings the first window forward |
@@ -89,11 +89,11 @@ What keeps them cheap:
   labels): gpui-kit's styled controls cost several times as much to lay out.
 
 `ui::perf` runs the main and settings windows on GPUI's test platform with the real text
-system. It checks what a meter frame draws, and checks each frame's cost against a reference
-frame timed alongside it, so the limits hold on a slow or busy machine. In a release build it
-also checks the times against hard limits: 10 ms for a full frame, 1 ms for a meter frame. CI
-runs it in a release build. Debug builds optimize
-the dependencies (`[profile.dev.package."*"]`), so `cargo run` and these tests come close to
+system. It checks what a meter frame draws. It times each full frame against a reference frame
+and each meter frame against a full frame, timed in turn, so the limits hold on a slow or busy
+machine. In a release build it also checks the times against hard limits: 10 ms for a full
+frame, 1 ms for a meter frame. CI runs it in a release build. Debug builds optimize the
+dependencies (`[profile.dev.package."*"]`), so `cargo run` and these tests come close to
 the release build.
 
 ## Reconnect
@@ -149,7 +149,8 @@ resent 22, missed 0; last 60 s: 6.0 requests/min, 0.0 missed/min; buffer 12, dri
 - **missed**: packets asked for that were no longer in the history, or never sent. The receiver
   cannot get them in time, so they are likely audible.
 
-The `last 60 s` rates (`LossStats`) drive the row's loss line and the profile hint. Nyx does not
+The `last 60 s` rates (`LossStats`) drive the row's loss line. They are also the input of the
+profile hint, which does not show yet (`advice::suggest_profile` is a stub). Nyx does not
 tell whether a resent packet arrived in time to be played; only `missed` is known to be lost.
 
 ## Files

@@ -38,7 +38,7 @@ slider drag must never wait for a frame. A slow frame is a bug. Read "UI respons
   controller. The controller and the audio path never wait for the UI either.
 - In a release build, the budget for a full frame is 5 ms, with a hard limit of 10 ms. A full
   frame is each step of a window drag and each state change.
-- The budget for a meter frame is 1 ms.
+- The hard limit for a meter frame is 1 ms.
 - When an accessibility client is attached, the content is not cached. Then each meter frame is
   a full frame (see `ui::meter`). This is one more reason to keep full frames cheap.
 - Keep the title bar out of the cached content. Otherwise the replayed view loses the caption
@@ -50,8 +50,9 @@ slider drag must never wait for a frame. A slow frame is a bug. Read "UI respons
 - Draw a frame only when something on screen changes. A timer or animation that does not stop
   uses CPU while the app is open. Example: the meter stops when no room plays or the window is
   minimized. It also skips frames in which no bar moves.
-- Measure, do not guess. Each `ui::perf` test draws a reference frame in the same run and
-  compares the frame time with it. Thus the check is valid on any machine. In a release build,
+- Measure, do not guess. Each timing test in `ui::perf` compares its frame with another frame
+  drawn in the same run: a full frame with a reference frame, a meter frame with a full frame.
+  Thus the check is valid on any machine. In a release build,
   the tests also fail a frame over its hard limit. CI runs them in a release build.
 - Before and after a UI change that adds to a room row or the title bar, run
   `cargo test --locked --release ui::perf -- --nocapture`. Compare the printed times with the

@@ -69,8 +69,8 @@ The rule is tied to the path. If you move the exe, add the rule again.
 2. **Rooms**: switch on the rooms that should play. Set each room's volume and latency profile.
 3. Press **Play**.
 
-Rooms are not clock-synced to each other yet, so two rooms play slightly offset (see the lag
-line). The gear in the title bar opens the settings window.
+Rooms are not clock-synced to each other yet, so two rooms play slightly offset. When the rooms
+that play are on different profiles, a note in the footer says by how much. The gear in the title bar opens the settings window.
 
 ### Command line
 
@@ -85,12 +85,13 @@ zephon stream --receiver Kitchen --receiver "Living Room"   # until Ctrl+C
 
 `zephon.exe` is a GUI program, so a terminal does not wait for it: the prompt returns at once
 and the output follows it. In PowerShell, use `zephon stream ... | Out-Host` to wait. In cmd,
-use `start /wait zephon stream ...`. Exit code 1 means a session failed.
+use `start /wait zephon stream ...`. Exit code 1 means an error or a failed session.
 
 ### Files
 
 Settings, the log and the receiver cache live in `%APPDATA%\Zephon\`. Delete the folder to reset
-the app.
+the app. Turn off **Start with Windows** first: its registry value is not in the folder, and
+neither is the firewall rule.
 
 ## Limitations
 
