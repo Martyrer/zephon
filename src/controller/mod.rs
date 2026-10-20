@@ -313,7 +313,7 @@ mod test_support {
     pub(super) fn room(name: &str, online: bool, selected: bool) -> ReceiverView {
         ReceiverView {
             name: name.into(),
-            addr: "192.168.1.20:7000".parse().unwrap(),
+            addr: "192.0.2.20:7000".parse().unwrap(),
             model: Some("AudioAccessory5,1".into()),
             online,
             selected,

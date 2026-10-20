@@ -49,22 +49,22 @@ type Room = (
 pub(super) fn receivers() -> Vec<ReceiverView> {
     const HOMEPOD_MINI: &str = "AudioAccessory5,1";
     let rooms: [Room; 4] = [
-        ("Den", [192, 168, 1, 30], "AppleTV14,1", None, false),
+        ("Den", [192, 0, 2, 30], "AppleTV14,1", None, false),
         (
             "Kitchen",
-            [192, 168, 1, 21],
+            [192, 0, 2, 21],
             HOMEPOD_MINI,
             Some((45.0, LatencyProfile::Balanced)),
             true,
         ),
         (
             "Living Room",
-            [192, 168, 1, 22],
+            [192, 0, 2, 22],
             HOMEPOD_MINI,
             Some((60.0, LatencyProfile::Stable)),
             true,
         ),
-        ("Office", [192, 168, 1, 23], HOMEPOD_MINI, None, true),
+        ("Office", [192, 0, 2, 23], HOMEPOD_MINI, None, true),
     ];
     rooms
         .into_iter()

@@ -1649,7 +1649,7 @@ mod tests {
     }
 
     fn addr(last: u8) -> SocketAddr {
-        SocketAddr::from(([192, 168, 1, last], 7000))
+        SocketAddr::from(([192, 0, 2, last], 7000))
     }
 
     fn found(name: &str, last: u8, model: Option<&str>) -> Receiver {

@@ -471,7 +471,7 @@ mod tests {
             "--receiver",
             "Kitchen",
             "--receiver",
-            "192.168.1.20",
+            "192.0.2.20",
             "--volume",
             "30",
             "--profile",
@@ -481,7 +481,7 @@ mod tests {
         else {
             panic!("not a stream command");
         };
-        assert_eq!(receiver, ["Kitchen", "192.168.1.20"]);
+        assert_eq!(receiver, ["Kitchen", "192.0.2.20"]);
         assert_eq!(volume, Some(30.0));
         assert_eq!(profile, Some(LatencyProfile::Stable));
         assert!(parse(&["stream"]).is_err());
