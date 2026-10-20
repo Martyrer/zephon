@@ -5,8 +5,9 @@
 //! scale (text size, font family) are chosen in the settings window, so the palettes, the
 //! theme JSON and [`Fonts`] are built at run time from these constants.
 //!
-//! Every surface is a translucent tint over the window material, so no color here is an
-//! opaque panel except the select menu. gpui-kit components read the theme JSON; the app's
+//! The surfaces are translucent tints over the window material. The opaque exceptions are
+//! small: the select menu and tooltips, the select fill and the slider thumb (see
+//! design/DESIGN.md). gpui-kit components read the theme JSON; the app's
 //! own elements (rooms, switch, sliders) read [`Palette`] directly, because some
 //! tokens have no gpui-kit field (amber/red washes) and gpui-kit clamps `list_active` to 20 %.
 //!
@@ -420,7 +421,8 @@ fn theme_config(name: &str, mode: &str, t: &Tokens) -> serde_json::Value {
         "font.size": 16,
         "radius": 4,
         "radius.lg": 8,
-        // The only shadows are the window's and the slider thumb's.
+        // No shadows on surfaces: only the window, the slider thumb and gpui-kit's popovers
+        // (select menu, tooltips) have one, and the popovers ignore this flag.
         "shadow": false,
         "colors": colors,
     })

@@ -35,7 +35,14 @@ The window is a pane of Windows glass with the rooms listed on it and Play in a 
 
 ## Color
 
-There are two token sets, Light and Dark, and the app's follow-system wiring chooses between them. Every surface is a translucent tint over the OS material, so no surface is opaque.
+There are two token sets, Light and Dark, and the app's follow-system wiring chooses between them. The window's surfaces are translucent tints over the OS material. A few small parts are opaque:
+
+- the select menu and tooltips (gpui-kit's popover fill: Light `#F9FAFB`, Dark `#2A2E36`)
+- the fill of the Sound from select while it can be changed: the control fill over the root tint, flattened over a typical material color
+- the slider thumb
+- the meter's well (see The level meter)
+
+With the Solid material, the root tint is opaque too.
 
 ### Base colors
 
@@ -102,7 +109,7 @@ Group edges, row dividers and control borders are decoration, not held to 3:1: a
 | `switch` (off track) | transparent, with a Track-colored outline |
 | `switch_thumb` | Ink 2 when off, `primary_foreground` when on |
 | `input` | Stroke strong |
-| `ring` (focus) | Ink, 2 px, offset 1 px (Windows style) |
+| `ring` (focus) | Ink. gpui-kit's default ring: a 3 px band of Ink at 50 %, flush outside the border, with no gap. A control with a border also turns its border Ink. |
 | `overlay` | Light `rgba(0,0,0,0.20)`, Dark `rgba(0,0,0,0.45)` |
 | warning / danger (if the kit has them; otherwise local constants) | Amber / Signal red, with their washes |
 
@@ -125,8 +132,8 @@ If an embedded face is ever wanted, Fixel is the one to use. Ship its static Tex
 | Role | Size / line | Weight | Optical size |
 |---|---|---|---|
 | Room name | 15 / 22 | 600 | Display |
-| Body, controls, buttons, "Rooms" | 14 / 20 | 400; 600 for "Rooms" and Play | Text |
-| Meta, status, loss, captions, title bar | 12 / 16 | 400; 600 for status words | Small |
+| Body, controls, buttons, "Rooms" | 14 / 20 | 400; 600 for "Rooms" | Text |
+| Meta, status, loss, captions, title bar | 12 / 16 | 400; 600 for status words except "Offline" | Small |
 
 The scale is 12 / 14 / 15. All text is in sentence case, with no all-caps labels.
 
@@ -151,7 +158,7 @@ A  Table (the alpha)                 B  Mixer strips                    C  Room 
                                                                          └─────────────────────────────┘
 ```
 
-I chose C. Only rooms that are on show volume, profile and loss, because those settings do nothing for a room that is off. Rooms that are off collapse to a single line. The rows are sorted by name and expand in place, so turning a room on never moves the row under the cursor. A newly found room can still shift the rows below it.
+I chose C. Only rooms that are on show volume, profile and loss, because those settings do nothing for a room that is off. Rooms that are off collapse to a single line. When a room is switched on, its volume slider and profile picker fade in over 180 ms. With reduced motion, they appear at once. The rows are sorted by name and expand in place, so turning a room on never moves the row under the cursor. A newly found room can still shift the rows below it.
 
 ### Main window, playing (560 px)
 
@@ -163,6 +170,17 @@ I chose C. Only rooms that are on show volume, profile and loss, because those s
 │                                                          │
 │ Rooms                                                  ↻ │
 │ ╭──────────────────────────────────────────────────────╮ │  one group, Layer 1
+│ │ Basement TV   TV-55 192.0.2.14         Playing  (●═) │ │
+│ │ ◁) ━━━━━━━━━━━━○────────────────────────────────  30 │ │
+│ │ ◷  ○─────────────────────●─────────────────────○     │ │
+│ │    Low 125 ms     Balanced 165 ms  Stable 257 ms     │ │
+│ │ 41 resends/min  3 lost/min                           │ │  amber
+│ │ ┌ Glitchy? Stable adds 92 ms …   [Switch to stable] ┐│ │  amber wash
+│ ├──────────────────────────────────────────────────────┤ │
+│ │ Den Apple TV 4K 192.0.2.7               Offline (═○) │ │  dimmed name
+│ ├──────────────────────────────────────────────────────┤ │
+│ │ Den Soundbar  Samsung HW-S60        …           (═○) │ │  room off: one line
+│ ├──────────────────────────────────────────────────────┤ │
 │ │ Kitchen  HomePod mini 192.0.2.101      Playing  (●═) │ │  room on: Layer 2
 │ │ ◁) ━━━━━━━━━━━━━━━━━━━━○────────────────────────  50 │ │
 │ │ ◷  ○─────────────────────●─────────────────────○     │ │  profile picker, same width
@@ -174,17 +192,6 @@ I chose C. Only rooms that are on show volume, profile and loss, because those s
 │ │ ◷  ○─────────────────────○─────────────────────●     │ │
 │ │    Low 125 ms     Balanced 165 ms  Stable 257 ms     │ │
 │ │ 6 resends/min                                        │ │
-│ ├──────────────────────────────────────────────────────┤ │
-│ │ Den Soundbar  Samsung HW-S60        …           (═○) │ │  room off: one line
-│ ├──────────────────────────────────────────────────────┤ │
-│ │ Basement TV   TV-55 192.0.2.14         Playing  (●═) │ │
-│ │ ◁) ━━━━━━━━━━━━○────────────────────────────────  30 │ │
-│ │ ◷  ○─────────────────────●─────────────────────○     │ │
-│ │    Low 125 ms     Balanced 165 ms  Stable 257 ms     │ │
-│ │ 41 resends/min  3 lost/min                           │ │  amber
-│ │ ┌ Glitchy? Stable adds 92 ms …   [Switch to stable] ┐│ │  amber wash
-│ ├──────────────────────────────────────────────────────┤ │
-│ │ Den Apple TV 4K 192.0.2.7               Offline (═○) │ │  dimmed name
 │ ╰──────────────────────────────────────────────────────╯ │
 ├──────────────────────────────────────────────────────────┤  footer, Layer 1
 │ Rooms on different profiles play up to 92 ms apart. Put  │  sync note, only when profiles differ
@@ -206,12 +213,24 @@ I chose C. Only rooms that are on show volume, profile and loss, because those s
 - The footer reads "2 rooms on", with the accent button **[▶ Play]** on the right.
 - With no room on, the footer reads "No rooms on" and **Play** is disabled, with the tooltip "Turn on at least one room to play." Switching off the last room while playing stops, so the window lands in this state.
 
+### No rooms
+
+- Until a room is found, the rooms group holds one line in 12 px Ink 2 on Layer 1: "Looking for rooms…" while the app browses, then "No rooms found yet."
+- The Rooms group in the settings window shows the same line.
+
+### Messages
+
+- When the app cannot pick a sound source, a line in Signal red (12 px) sits under **Sound from**, for example "No active playback device found."
+- A failed action puts one amber line (12 px) in the footer, under the sync note and above the summary. Examples: "Capture failed: …", "Turn on at least one room." and "Choose where the sound comes from first." The next Play clears it.
+
 ### Firewall banner (rare)
 
-The banner has two sizes and uses the same button label, **Install firewall rule**, in both.
+The banner has three forms. Both forms that offer the install use the same button label, **Install firewall rule**.
 
-- **Compact**, one line between Sound from and Rooms: "Firewall rule missing" and **[Install firewall rule]**. It appears as soon as the startup check finds no rule.
-- **Full**, which replaces the compact one after a room has failed with the 10 s timeout. It adds a title, the cause ("Rooms send timing replies back to this PC…") and the note "Windows asks for admin permission once."
+- **Compact**, one line between Sound from and Rooms: "Firewall rule missing" and **[Install firewall rule]**. It appears as soon as the startup check finds no rule. If the check finds a rule that blocks the app, the line reads "Firewall rule blocks this app".
+- **Full**, which replaces the compact one after a room has failed with the 10 s timeout. It adds the title "Windows Firewall is blocking rooms", the cause ("Rooms send timing replies back to this PC…", or "A firewall rule blocks this app…" for a blocking rule) and the note "Windows asks for admin permission once."
+- **Error**, one line with no button, when the check itself fails: "Couldn't check the firewall:" followed by the cause.
+- While the rule installs, the button reads "Waiting for permission…", shows a loading indicator and is disabled.
 - After the install and a successful re-check, the banner disappears with no "Installed" message.
 
 ## Components (six)
@@ -226,11 +245,11 @@ The corner radii have a hierarchy, so not everything gets the same radius:
 - controls, hint and error: 4
 - switch: fully round
 
-The only shadows are the window's (from the OS) and a 1 px shadow under the slider thumb. The level meter is part of the slider, not a component of its own. The rows sit in one shared group and are separated by hairlines, so there are no separate cards with their own shadows.
+The only shadows are the window's (from the OS), a 1 px shadow under the slider thumb, and gpui-kit's drop shadow under the select menu and tooltips. The level meter is part of the slider, not a component of its own. The rows sit in one shared group and are separated by hairlines, so there are no separate cards with their own shadows.
 
 ## Principles
 
-1. **Native first.** Windows 11 metrics (32 px controls, 40×20 switch, 20 px slider thumb with an inner dot, 46 px caption buttons) and Segoe UI Variable throughout.
+1. **Native first.** Windows 11 metrics (32 px controls, 40×20 switch, 20 px slider thumb with an inner dot) and Segoe UI Variable throughout. The title bar is 40 px tall. Its caption buttons are gpui-kit's, 34 px wide (Windows' own are 46 px).
 2. **Glass is the backdrop, not decoration.** The window is the only surface that is blurred. Panels are flat translucent tints over it, and no element uses a blur of its own.
 3. **Show controls only where they do something.** A room that is off has no volume slider or profile picker. While playing, Sound from shows as plain text with "Stop to change" instead of looking like a broken select.
 4. **Numbers in fixed slots.** Volume, lag and loss each have a fixed position with tabular digits, so a glance compares rooms without reading labels.
@@ -333,6 +352,7 @@ The gear in the main title bar opens a second, smaller window (520 × 640, resiz
 - **Layout.** The Windows 11 Settings pattern on our glass: five sections (Appearance, Playback, Rooms, System, About), each one rounded group of rows separated by hairlines, the same component as the rooms list (Layer 1 rows, 8 px group radius, 16 px from the window edge). A row is a label with one line of description in Ink 2 on the left, and its control on the right in a 180 px column (times the text size), so selects line up. Selects are full width in that column; switches and buttons sit at its right edge.
 - **Narrow.** Below 440 px (times the text size), the control moves under its label and takes the full row, as the room controls do in the main window.
 - **Descriptions** say what the setting does in one line, and turn amber when something is off: the material fell back, the saved font is not installed, the Windows accent could not be read, the firewall rule is missing. The firewall row then offers **Fix** (the accent button) in place of **Check again**.
+- **Rooms** lists every known room, each with a switch that shows or hides it. A hidden room's name is Ink 2.
 - **Controls** are the main window's own: the 40 × 20 switch, the slider with the inner dot, and gpui-kit's select and button with the same tokens. No new components.
 - **Text size** (Small 0.92×, Default, Large 1.15×) scales the type scale, gpui-kit's rem (so control heights follow), the boxes sized to hold text and the narrow breakpoints. Spacing, the switch and the slider keep their Windows metrics, as in Windows' own text-size setting.
 - **Accent.** Lagoon, or the Windows accent. The Windows accent starts from Windows' own variants (Dark 1 in the light theme, Light 2 in the dark theme) and moves in lightness until text on it and the accent on the glass reach 4.5:1, checked against the footer and room fills over the darkest and brightest backdrop each window material allows. Text on it is white in Light and a near-black of its hue in Dark, as with Lagoon.
@@ -341,10 +361,10 @@ The gear in the main title bar opens a second, smaller window (520 × 640, resiz
 
 **Brief check.**
 - *Simple, minimal:* the window has one list, one select and one button, and rooms that are off take a single line.
-- *Glassy:* the title bar and every surface are tints over the window material (Acrylic by default), with no opaque panels.
+- *Glassy:* the title bar and every panel are tints over the window material (Acrylic by default). Only small parts are opaque: the select menu, tooltips, the Sound from fill, the slider thumb and the meter's well.
 - *Modern:* Windows 11 control metrics.
 - *Dark and light, following system:* two token sets plus the Theme setting.
-- *Real states:* the window holds all of them: playing, off, offline, loss, lost, the hint, the error, both firewall banners, stopped, and locked Sound from.
+- *Real states:* the window holds all of them: playing, off, offline, loss, lost, the hint, the error, the firewall banners, stopped, and locked Sound from.
 
 **Revisions made in the plan, before building:**
 
