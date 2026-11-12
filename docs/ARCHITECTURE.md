@@ -74,7 +74,7 @@ What keeps them cheap:
 - **The title bar is not cached.** Windows asks on each click in the title bar whether it hit
   a caption button or the drag area (`WM_NCHITTEST`), and GPUI answers from the
   window-control areas of the last frame. A cached view that is replayed does not carry them
-  over (gpui-pre 0.3.9: `Window::reuse_paint` does not replay `window_control_hitboxes`), so
+  over (gpui-pre 0.3.12: `Window::reuse_paint` does not replay `window_control_hitboxes`), so
   a title bar inside the cached content lost its buttons on every meter frame.
 - **Columns have a definite width.** A flex column whose width comes from stretching (a plain
   `v_flex()` in another column) is laid out again in each layout pass of its parent, so each
