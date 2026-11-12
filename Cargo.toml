@@ -37,9 +37,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # GUI. gpui-kit ships about weekly with breaking changes and rides an exact Zed GPUI
 # snapshot, so both are pinned to exact versions. Bump them together and test the GUI by hand.
-gpui-kit = "=0.7.3"
+gpui-kit = "=0.9.1"
 # Not used directly: only pins the GPUI snapshot (renamed so it cannot clash with `gpui_kit::gpui`).
-gpui-snapshot-pin = { package = "gpui-pre", version = "=0.3.9" }
+gpui-snapshot-pin = { package = "gpui-pre", version = "=0.3.12" }
 futures = "0.3"
 # The window's HWND, for the DWM calls behind Mica, rounded corners and the dark frame.
 raw-window-handle = "0.6"
@@ -48,7 +48,7 @@ raw-window-handle = "0.6"
 # Paused time for the controller's timing tests.
 tokio = { version = "1.43", features = ["test-util"] }
 # GPUI's TestAppContext, for the UI frame tests.
-gpui-snapshot-pin = { package = "gpui-pre", version = "=0.3.9", features = ["test-support"] }
+gpui-snapshot-pin = { package = "gpui-pre", version = "=0.3.12", features = ["test-support"] }
 
 [build-dependencies]
 # Embeds assets/icon.ico as the exe icon (build.rs).
