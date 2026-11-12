@@ -37,7 +37,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # GUI. gpui-kit ships about weekly with breaking changes and rides an exact Zed GPUI
 # snapshot, so both are pinned to exact versions. Bump them together and test the GUI by hand.
-gpui-kit = "=0.7.3"
+gpui-kit = "=0.8.0"
 # Not used directly: only pins the GPUI snapshot (renamed so it cannot clash with `gpui_kit::gpui`).
 gpui-snapshot-pin = { package = "gpui-pre", version = "=0.3.9" }
 futures = "0.3"
