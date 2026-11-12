@@ -5,3 +5,26 @@ updates:
     directory: /
     schedule:
       interval: monthly
+
+  # Keeps the crates in Cargo.toml current. CI checks each pull request.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # The Nyx-Refrain crates move only after a human reads the upstream diff and does a
+      # listening test (see AGENTS.md).
+      - dependency-name: capture
+      - dependency-name: raop
+      - dependency-name: pipeline
+      - dependency-name: discovery
+      - dependency-name: netutil
+    # A dependency goes to the first group that matches it.
+    groups:
+      # gpui-kit rides an exact GPUI snapshot, so the two move together, in their own pull
+      # request. Test the GUI by hand before merging.
+      gpui:
+        patterns: ["gpui-kit", "gpui-pre"]
+      # Minor and patch updates of everything else, in one pull request.
+      crates:
+        update-types: [minor, patch]
