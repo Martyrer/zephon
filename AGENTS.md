@@ -118,5 +118,6 @@ For timing logic, use tokio paused time (`start_paused`), not real sleeps.
 ### Git
 
 - One change per commit or pull request.
-- Do not push, tag or publish a release unless asked. Tags starting with `v` run the release
-  workflow.
+- Do not push, tag or publish a release unless asked. A push to main with a new version in
+  `Cargo.toml` and a dated `## [<version>] - YYYY-MM-DD` heading in `CHANGELOG.md` publishes a
+  release, so do not change either unless asked (see "Releases" in CONTRIBUTING.md).

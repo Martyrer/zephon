@@ -52,6 +52,22 @@ Notes:
 - Match the style of the surrounding code: comments explain why, not what.
 - New behavior in the controller or settings gets a unit test where that is practical.
 
+## Releases
+
+CI publishes a release by itself. To ship version `0.2.0`, merge one pull request to main
+that:
+
+1. sets `version = "0.2.0"` in `Cargo.toml` (and runs `cargo check` so that `Cargo.lock`
+   follows);
+2. moves the notes under `## [Unreleased]` in `CHANGELOG.md` to a new
+   `## [0.2.0] - YYYY-MM-DD` section, dated the day of the release.
+
+The release workflow then runs the tests, builds the zip, tags `v0.2.0` on that commit and
+publishes the release with the changelog section as its notes. A version with a hyphen, such
+as `0.2.0-beta`, is published as a prerelease. A section headed `- unreleased` instead of a
+date does not ship, so a version bump can wait on main until the release day. If a release
+fails, fix the cause and run the workflow again from the Actions tab.
+
 ## License
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in
