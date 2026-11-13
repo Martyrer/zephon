@@ -60,7 +60,7 @@ const PROFILE_HOLD: Duration = Duration::from_millis(1500);
 const VOLUME_SEND_INTERVAL: Duration = Duration::from_millis(80);
 /// Below this width the room controls stack (DESIGN.md, "Narrow").
 const NARROW_WIDTH: Pixels = px(440.);
-/// The name in the title bar (the OS window title keeps "(alpha)").
+/// The name in the title bar.
 const APP_NAME: &str = "Zephon";
 
 /// The latest controller snapshot, shared by both windows.

@@ -12,9 +12,6 @@ a command line.
 </picture>
 <img alt="Zephon settings window" src="docs/screenshots/settings-light.png" width="392">
 
-> **Alpha.** Zephon works on the author's setup, but it has had little testing on other
-> networks and devices. See [Limitations](#limitations).
-
 ## Why
 
 HomePod Software 27.0 stopped accepting AirPlay 1 (RAOP) streams, so older Windows senders

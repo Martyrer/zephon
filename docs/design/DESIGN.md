@@ -342,7 +342,7 @@ The gear in the main title bar opens a second, smaller window (520 × 640, resiz
 │ ╰────────────────────────────────────────────╯ │
 │ About                                          │
 │ ╭────────────────────────────────────────────╮ │
-│ │ Zephon           Version 0.1.0-alpha       │ │
+│ │ Zephon           Version 1.0.0             │ │
 │ │ Log                      [Open log folder] │ │
 │ │ Settings file         [Open settings file] │ │
 │ ╰────────────────────────────────────────────╯ │
