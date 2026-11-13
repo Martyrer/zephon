@@ -1,6 +1,6 @@
 [package]
 name = "zephon"
-version = "0.1.0-alpha"
+version = "1.0.0"
 edition = "2024"
 description = "Plays Windows system audio on AirPlay 2 speakers such as the HomePod mini"
 license = "MIT OR Apache-2.0"

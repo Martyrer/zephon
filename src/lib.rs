@@ -1,4 +1,4 @@
-//! Zephon (alpha): streams Windows system audio to AirPlay 2 receivers.
+//! Zephon: streams Windows system audio to AirPlay 2 receivers.
 //!
 //! The headless core is public: `settings`, `capture`, `level`, `discovery`, `session`,
 //! `firewall`, `advice` and `autostart`, with `controller` between the core and the gpui-kit window in
@@ -26,4 +26,4 @@ mod winreg;
 pub use cli::run;
 
 /// The main window's title. A second launch finds the running copy's window by it.
-pub const APP_TITLE: &str = "Zephon (alpha)";
+pub const APP_TITLE: &str = "Zephon";

@@ -6,6 +6,20 @@ All notable changes to this project are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-13
+
+First public release.
+
+- Streams Windows system audio to AirPlay 2 receivers (AirPlay 2 realtime, NTP timing, PCM),
+  built on the Nyx-Refrain crates.
+- Several rooms at once, each with its own volume and latency profile (Low, Balanced, Stable).
+- Main window with the room list, a level meter, lag and loss per room; settings window with
+  theme, window material, font, text size, accent color, playback defaults, hidden rooms, start
+  with Windows and the firewall rule.
+- Command line: `devices`, `receivers`, `firewall`, `stream`.
+
+The sections below list the changes since the 0.1.0-alpha preview builds.
+
 ### Added
 
 - Each room that plays shows the level of its sound in its volume rail, like the Windows volume
@@ -17,6 +31,7 @@ All notable changes to this project are listed here. The format follows
 
 ### Changed
 
+- Zephon is no longer marked as alpha: the window title is now "Zephon".
 - The lag line at the bottom of the window is gone: its dots looked draggable but weren't, and
   each room already shows its lag. When rooms on different profiles play out of step, the
   footer now says by how much and which profile lines them up.
@@ -47,7 +62,7 @@ All notable changes to this project are listed here. The format follows
 
 ## [0.1.0-alpha] - unreleased
 
-First public release.
+Preview builds only. This version was never published as a release.
 
 - Streams Windows system audio to AirPlay 2 receivers (AirPlay 2 realtime, NTP timing, PCM),
   built on the Nyx-Refrain crates.

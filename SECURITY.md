@@ -14,7 +14,7 @@ get a first answer within a week.
 
 ## Supported versions
 
-Only the latest release gets security fixes while Zephon is in alpha.
+Only the latest release gets security fixes.
 
 ## Design notes
 
